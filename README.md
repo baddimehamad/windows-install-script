@@ -70,6 +70,18 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
 5. **Pick software:** enter numbers like `1,3,5`, or `A` for all, or `0` to skip.
 6. **Done:** check the summary at the end. If anything failed, open the `Logs` folder.
 
+### 🌐 Run directly from the web (no download)
+
+On any PC with internet, open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/baddimehamad/windows-install-script/main/Setup-Online.ps1 | iex
+```
+
+This downloads the latest version, extracts it to your temp folder, and starts the setup. Approve the UAC prompt when it appears.
+
+> Note: `OfficeSetup.exe` and other local installers are not in the repo, so those menu items show `FILE NOT FOUND` in online mode unless you copy the files in manually afterwards. Winget apps work normally.
+
 Example session:
 
 ```text
@@ -101,6 +113,7 @@ Software numbers: 1,3,5
 windows-install-script/
 ├── Run-Setup.bat      ← double-click this to start
 ├── Install-MyPC.ps1   ← main PowerShell script (auto-elevates to admin)
+├── Setup-Online.ps1   ← web launcher for `irm ... | iex` (downloads repo ZIP, then runs Install-MyPC.ps1)
 ├── Software.json      ← edit this to add/remove apps
 ├── Installers/        ← optional folder for your own .exe / .msi files
 │   └── README.txt
