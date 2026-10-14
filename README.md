@@ -9,6 +9,14 @@ Pick what you want from a menu — enable the built-in Administrator account, re
 ![Winget](https://img.shields.io/badge/Package%20Manager-Winget-green)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
+## 🌐 Run directly from the web (no download)
+
+On any PC with internet, open PowerShell and run:
+
+```powershell
+irm https://tinyurl.com/27wv3wmc | iex
+```
+
 ---
 
 ## ✨ What it does
@@ -70,13 +78,9 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
 5. **Pick software:** enter numbers like `1,3,5`, or `A` for all, or `0` to skip.
 6. **Done:** check the summary at the end. If anything failed, open the `Logs` folder.
 
-### 🌐 Run directly from the web (no download)
+### 🌐 Run directly from the web (no download) — details
 
-On any PC with internet, open PowerShell and run:
-
-```powershell
-irm https://tinyurl.com/27wv3wmc | iex
-```
+Same one-liner as at the top: `irm https://tinyurl.com/27wv3wmc | iex`
 
 <details>
 <summary>Full URL and custom alias</summary>
