@@ -88,5 +88,42 @@
       "Arguments": [],
       "Enabled": true
     }
+  ],
+  "PrinterDrivers": [
+    {
+      "Make": "Konica Minolta (Universal PCL6)",
+      "DriverHint": "KONICA MINOLTA Universal PCL6",
+      "Path": "Drivers\\KonicaMinolta_UPD",
+      "Url": "",
+      "Enabled": true
+    },
+    {
+      "Make": "HP (Universal PCL6)",
+      "DriverHint": "HP Universal Printing PCL 6",
+      "Path": "Drivers\\HP_UPD",
+      "Url": "",
+      "Enabled": true
+    },
+    {
+      "Make": "Canon (Generic Plus PCL6)",
+      "DriverHint": "Canon Generic Plus PCL6",
+      "Path": "Drivers\\Canon_GenericPlus",
+      "Url": "",
+      "Enabled": true
+    },
+    {
+      "Make": "Brother",
+      "DriverHint": "",
+      "Path": "Drivers\\Brother",
+      "Url": "",
+      "Enabled": true
+    },
+    {
+      "Make": "Epson",
+      "DriverHint": "",
+      "Path": "Drivers\\Epson",
+      "Url": "",
+      "Enabled": true
+    }
   ]
 }

@@ -507,6 +507,186 @@ function Install-LocalSoftware {
     }
 }
 
+function Install-NetworkPrinter {
+    param([Parameter(Mandatory = $true)]$Config)
+
+    if (-not (Get-Command Add-Printer -ErrorAction SilentlyContinue)) {
+        Write-Host 'Printer cmdlets (PrintManagement) are not available on this Windows edition.' -ForegroundColor Red
+        $script:failed.Add('Printer install skipped: PrintManagement unavailable')
+        return
+    }
+
+    $presets = @(@($Config.PrinterDrivers) | Where-Object { $null -ne $_ -and $_.Enabled -ne $false -and -not [string]::IsNullOrWhiteSpace([string]$_.Make) })
+    if ($presets.Count -eq 0) {
+        Write-Host 'No printer driver presets are enabled in Software.json (PrinterDrivers).' -ForegroundColor Yellow
+        $script:failed.Add('Printer install skipped: no PrinterDrivers presets')
+        return
+    }
+
+    Write-Host ''
+    Write-Host 'PRINTER MANUFACTURER / FABRICANT :' -ForegroundColor Cyan
+    for ($i = 0; $i -lt $presets.Count; $i++) {
+        Write-Host (" {0,2}. {1}" -f ($i + 1), $presets[$i].Make)
+    }
+    Write-Host '  0. Cancel / Annuler'
+    $makeChoice = ((Read-Host 'Manufacturer number / Numero') | ForEach-Object { "$_".Trim() })
+    if ([string]::IsNullOrWhiteSpace($makeChoice) -or $makeChoice -eq '0') {
+        Write-Host 'Printer install cancelled. / Annule.' -ForegroundColor DarkYellow
+        return
+    }
+    if ($makeChoice -notmatch '^\d+$' -or [int]$makeChoice -lt 1 -or [int]$makeChoice -gt $presets.Count) {
+        Write-Host 'Invalid manufacturer selection.' -ForegroundColor Yellow
+        $script:failed.Add('Printer install skipped: invalid manufacturer')
+        return
+    }
+    $preset = $presets[[int]$makeChoice - 1]
+    Write-Host ("Selected: {0}" -f $preset.Make) -ForegroundColor Green
+
+    # --- Driver files: local folder/INF, or download via Url, or ask for a path. ---
+    $driverDir = ''
+    $presetPath = [string]$preset.Path
+    if (-not [string]::IsNullOrWhiteSpace($presetPath)) {
+        if ([System.IO.Path]::IsPathRooted($presetPath)) { $driverDir = $presetPath }
+        else { $driverDir = Join-Path $script:scriptRoot $presetPath }
+    }
+    $presetUrl = ''
+    if ($null -ne $preset.Url) { $presetUrl = ([string]$preset.Url).Trim() }
+    $infPath = ''
+    if ((-not [string]::IsNullOrWhiteSpace($driverDir)) -and (Test-Path -LiteralPath $driverDir)) {
+        if ((Test-Path -LiteralPath $driverDir -PathType Leaf) -and $driverDir.ToLowerInvariant().EndsWith('.inf')) {
+            $infPath = $driverDir
+        } else {
+            $infs = @(Get-ChildItem -LiteralPath $driverDir -Filter '*.inf' -File -ErrorAction SilentlyContinue)
+            if ($infs.Count -eq 1) { $infPath = $infs[0].FullName }
+            elseif ($infs.Count -gt 1) {
+                Write-Host 'Several INF files found, pick one:' -ForegroundColor Cyan
+                for ($i = 0; $i -lt $infs.Count; $i++) { Write-Host (" {0,2}. {1}" -f ($i + 1), $infs[$i].Name) }
+                $infChoice = ((Read-Host 'INF number') | ForEach-Object { "$_".Trim() })
+                if ($infChoice -match '^\d+$' -and [int]$infChoice -ge 1 -and [int]$infChoice -le $infs.Count) {
+                    $infPath = $infs[[int]$infChoice - 1].FullName
+                }
+            }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($infPath) -and (-not [string]::IsNullOrWhiteSpace($presetUrl))) {
+        try {
+            if ([string]::IsNullOrWhiteSpace($driverDir)) { $driverDir = Join-Path $script:scriptRoot 'Drivers' }
+            New-Item -ItemType Directory -Path $driverDir -Force -ErrorAction Stop | Out-Null
+            $uri = [System.Uri]$presetUrl
+            $dlName = [System.IO.Path]::GetFileName($uri.LocalPath)
+            if ([string]::IsNullOrWhiteSpace($dlName)) { $dlName = 'driver_package.zip' }
+            $dlPath = Join-Path $driverDir $dlName
+            Write-Host ("Downloading driver from {0} ..." -f $presetUrl) -ForegroundColor Cyan
+            $dlParams = @{ Uri = $presetUrl; OutFile = $dlPath; ErrorAction = 'Stop' }
+            if ($PSVersionTable.PSVersion.Major -le 5) { $dlParams['UseBasicParsing'] = $true }
+            Invoke-WebRequest @dlParams
+            if ($dlPath.ToLowerInvariant().EndsWith('.zip')) {
+                Expand-Archive -LiteralPath $dlPath -DestinationPath $driverDir -Force -ErrorAction Stop
+            }
+            $infs = @(Get-ChildItem -LiteralPath $driverDir -Filter '*.inf' -File -Recurse -ErrorAction SilentlyContinue)
+            if ($infs.Count -ge 1) { $infPath = $infs[0].FullName }
+        } catch {
+            Write-Host ("Driver download failed: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($infPath)) {
+        Write-Host ("Driver files for '{0}' were not found." -f $preset.Make) -ForegroundColor Yellow
+        Write-Host 'Download the universal driver from the vendor site (e.g. Konica Minolta Universal PCL6),' -ForegroundColor Yellow
+        Write-Host 'extract it, and point Software.json PrinterDrivers Path at the folder (or fill Url).' -ForegroundColor Yellow
+        $manualInf = ((Read-Host 'Or enter a full path to an .inf file now (blank to cancel)') | ForEach-Object { "$_".Trim() })
+        if ([string]::IsNullOrWhiteSpace($manualInf) -or -not (Test-Path -LiteralPath $manualInf -PathType Leaf)) {
+            Write-Host 'Printer install cancelled (no driver INF).' -ForegroundColor DarkYellow
+            $script:failed.Add('Printer install skipped: no driver INF')
+            return
+        }
+        $infPath = $manualInf
+    }
+
+    # --- Import the driver, auto-detecting its real name (works in EN and FR Windows). ---
+    $driversBefore = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+    Write-Host ("Importing driver from {0} ..." -f $infPath) -ForegroundColor Cyan
+    & pnputil.exe /add-driver "$infPath" /install 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ("pnputil failed (exit {0}). The INF may be wrong for this Windows (x86 vs x64)." -f $LASTEXITCODE) -ForegroundColor Red
+        $script:failed.Add('Printer install failed: pnputil import error')
+        return
+    }
+    $driversAfter = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+    $newDrivers = @($driversAfter | Where-Object { $_ -notin $driversBefore })
+    $driverName = ''
+    if ($newDrivers.Count -eq 1) {
+        $driverName = $newDrivers[0]
+    } elseif ($newDrivers.Count -gt 1) {
+        Write-Host 'Several drivers were imported, pick one:' -ForegroundColor Cyan
+        for ($i = 0; $i -lt $newDrivers.Count; $i++) { Write-Host (" {0,2}. {1}" -f ($i + 1), $newDrivers[$i]) }
+        $drvChoice = ((Read-Host 'Driver number') | ForEach-Object { "$_".Trim() })
+        if ($drvChoice -match '^\d+$' -and [int]$drvChoice -ge 1 -and [int]$drvChoice -le $newDrivers.Count) {
+            $driverName = $newDrivers[[int]$drvChoice - 1]
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($driverName) -and (-not [string]::IsNullOrWhiteSpace([string]$preset.DriverHint))) {
+        $hint = [string]$preset.DriverHint
+        $match = @($driversAfter | Where-Object { "$_" -ieq $hint })
+        if ($match.Count -ge 1) { $driverName = $match[0] }
+    }
+    if ([string]::IsNullOrWhiteSpace($driverName)) {
+        Write-Host 'Could not determine the imported driver name. Installed drivers:' -ForegroundColor Yellow
+        @($driversAfter | Select-Object -Last 10) | ForEach-Object { Write-Host (" - {0}" -f $_) }
+        $driverName = ((Read-Host 'Type the exact driver name to use') | ForEach-Object { "$_".Trim() })
+    }
+    if ([string]::IsNullOrWhiteSpace($driverName)) {
+        Write-Host 'Printer install cancelled (no driver selected).' -ForegroundColor DarkYellow
+        $script:failed.Add('Printer install skipped: no driver name')
+        return
+    }
+    Write-Host ("Driver ready: '{0}'" -f $driverName) -ForegroundColor Green
+
+    # --- TCP/IP port + printer on this local PC. ---
+    $ipAddress = ((Read-Host 'Printer IP address or hostname / Adresse IP ou nom') | ForEach-Object { "$_".Trim() })
+    if ([string]::IsNullOrWhiteSpace($ipAddress)) {
+        Write-Host 'Printer install cancelled (no IP/hostname).' -ForegroundColor DarkYellow
+        $script:failed.Add('Printer install skipped: no address')
+        return
+    }
+    $portInput = ((Read-Host 'Port (Enter = 9100 RAW)') | ForEach-Object { "$_".Trim() })
+    $portNumber = 9100
+    if (-not [string]::IsNullOrWhiteSpace($portInput)) {
+        if ($portInput -notmatch '^\d+$' -or [int]$portInput -lt 1 -or [int]$portInput -gt 65535) {
+            Write-Host 'Invalid port, using 9100.' -ForegroundColor Yellow
+        } else {
+            $portNumber = [int]$portInput
+        }
+    }
+    $defaultName = ("{0} {1}" -f $preset.Make, $ipAddress)
+    $printerName = ((Read-Host ("Printer name on this PC (Enter = '{0}')" -f $defaultName)) | ForEach-Object { "$_".Trim() })
+    if ([string]::IsNullOrWhiteSpace($printerName)) { $printerName = $defaultName }
+
+    $portName = "TCP_$ipAddress"
+    try {
+        $existingPort = Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue
+        if ($null -eq $existingPort) {
+            Add-PrinterPort -Name $portName -PrinterHostAddress $ipAddress -PortNumber $portNumber -ErrorAction Stop
+            Write-Host ("Created TCP/IP port '{0}' -> {1}:{2}." -f $portName, $ipAddress, $portNumber) -ForegroundColor Green
+        } else {
+            Write-Host ("Reusing existing port '{0}'." -f $portName) -ForegroundColor DarkGray
+        }
+        $existingPrinter = Get-Printer -Name $printerName -ErrorAction SilentlyContinue
+        if ($null -ne $existingPrinter) {
+            $overwrite = ((Read-Host ("A printer named '{0}' already exists. Overwrite? [y/N]" -f $printerName)) | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+            if ($overwrite -notin @('y', 'yes', 'o', 'oui')) {
+                Write-Host 'Kept the existing printer unchanged.' -ForegroundColor DarkYellow
+                return
+            }
+            Remove-Printer -Name $printerName -ErrorAction Stop
+        }
+        Add-Printer -Name $printerName -DriverName $driverName -PortName $portName -ErrorAction Stop
+        Write-Host ("Printer '{0}' installed on port '{1}' with driver '{2}'." -f $printerName, $portName, $driverName) -ForegroundColor Green
+    } catch {
+        Write-Host ("Could not install the printer: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        $script:failed.Add('Printer install failed')
+    }
+}
+
 function Get-SelectableSoftware {
     param([Parameter(Mandatory = $true)]$Config)
 
@@ -627,7 +807,8 @@ try {
     Write-Host '  1. Enable built-in Administrator and set a new password (you will enter it)'
     Write-Host '  2. Rename the currently signed-in local user account'
     Write-Host '  3. Choose software to install from a numbered list'
-    Write-Host '  4. Run all three options'
+    Write-Host '  4. Install a printer (TCP/IP: manufacturer, IP, name)'
+    Write-Host '  5. Run all options (1+2+3+4)'
     Write-Host '  0. Exit / Quitter'
     Write-Host ''
     Write-Host 'You can choose more than one option, for example: 1,3'
@@ -641,14 +822,14 @@ try {
         continue
     }
 
-    if ($mainChoice -eq '4') {
-        $actions = @('1', '2', '3')
+    if ($mainChoice -eq '5') {
+        $actions = @('1', '2', '3', '4')
     } else {
         $actions = @($mainChoice -split '[,;\s]+' | Select-Object -Unique)
-        $validActions = @('1', '2', '3')
+        $validActions = @('1', '2', '3', '4')
         $invalidActions = @($actions | Where-Object { $_ -notin $validActions })
         if ($invalidActions.Count -gt 0) {
-            Write-Host 'Invalid main-menu selection. Use 1, 2, 3, 4, or 0. Example: 1,3' -ForegroundColor Yellow
+            Write-Host 'Invalid main-menu selection. Use 1, 2, 3, 4, 5, or 0. Example: 1,3' -ForegroundColor Yellow
             Read-Host 'Press Enter for main menu / Entree = menu principal'
             continue
         }
@@ -683,6 +864,8 @@ try {
             Write-Host 'No software selected.' -ForegroundColor DarkYellow
         }
     }
+
+    if ($actions -contains '4') { Install-NetworkPrinter -Config $config }
 
     Write-Host ''
     Write-Host '--------------------------------------------------------' -ForegroundColor Cyan

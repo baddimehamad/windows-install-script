@@ -21,14 +21,15 @@ irm https://tinyurl.com/27wv3wmc | iex
 
 ## ✨ What it does
 
-When you run the tool you get a main menu with 3 actions:
+When you run the tool you get a main menu with 4 actions:
 
 | # | Action | Description |
 |---|--------|-------------|
 | 1 | **Enable built-in Administrator** | Enables the hidden Administrator account (SID ending in `-500`, so `Administrator` or `Administrateur`) and prompts you to enter a new password. Type `YES`/`OUI` (any case) to confirm. |
 | 2 | **Rename current local user** | Renames the local account you were signed in with (name + display name). Does **not** rename `C:\Users\OldName`. |
 | 3 | **Install software** | Shows a numbered list from `Software.json`. Install only what you pick, e.g. `1,3,5`, or `A` for all, `0` to skip. |
-| 4 | **Run all** | Runs 1 + 2 + 3 in order. |
+| 4 | **Install a printer** | Pick a manufacturer (e.g. Konica Minolta Universal PCL6), then enter the printer IP/hostname, port (default 9100) and the name for this PC. Creates a local TCP/IP port and installs the printer. |
+| 5 | **Run all** | Runs 1 + 2 + 3 + 4 in order. |
 | 0 | **Exit** | Exit without further changes. |
 
 After each step finishes you return to this menu: press **Enter** for home, or `0` to exit.
@@ -76,7 +77,7 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
      ```
 2. **(Optional) Add Office:** copy your `OfficeSetup.exe` next to `Install-MyPC.ps1` (same folder as `Run-Setup.bat`).
 3. **Run:** double-click **`Run-Setup.bat`** → approve the UAC prompt.
-4. **Choose:** enter e.g. `4` to run everything, or `1,3` for Administrator + software only.
+4. **Choose:** enter e.g. `5` to run everything, or `1,3` for Administrator + software only.
    - If you chose option 1, type `YES`/`OUI` (any case: yes, Yes, oui...) to confirm, then enter a new password when asked (minimum 8 characters), then confirm it. Leave blank to cancel.
 5. **Pick software:** enter numbers like `1,3,5`, or `A` for all, or `0` to skip.
 6. **Done:** check the summary at the end. If anything failed, open the `Logs` folder.
@@ -112,7 +113,8 @@ Choose what you want to do:
   1. Enable built-in Administrator and set a new password (you will enter it)
   2. Rename the currently signed-in local user account
   3. Choose software to install from a numbered list
-  4. Run all three options
+  4. Install a printer (TCP/IP: manufacturer, IP, name)
+  5. Run all options (1+2+3+4)
   0. Exit
 
 Enter option number(s): 1,3
@@ -136,6 +138,8 @@ windows-install-script/
 ├── Setup-Online.ps1   ← web launcher for `irm ... | iex` (downloads repo ZIP, then runs Install-MyPC.ps1)
 ├── Software.json      ← edit this to add/remove apps
 ├── Installers/        ← optional folder for your own .exe / .msi files
+│   └── README.txt
+├── Drivers/           ← printer driver folders (e.g. Drivers\KonicaMinolta_UPD)
 │   └── README.txt
 └── Logs/              ← created automatically, one log per run
 ```
@@ -239,6 +243,28 @@ Default entry in `Software.json`:
 - The script launches it as-is. Unattended install depends on your specific Office installer.
 - Activation still needs a valid license / Microsoft 365 account — this script does not bypass licensing.
 
+### 🖨️ Install a printer (option 4)
+
+The script asks: **manufacturer → printer IP/hostname → port (Enter = 9100) → printer name** (default: `<manufacturer> <IP>`). It creates a local TCP/IP port (`TCP_<IP>`) and installs the printer on this PC.
+
+Driver presets live in the `PrinterDrivers` array in `Software.json`:
+
+```json
+{
+  "Make": "Konica Minolta (Universal PCL6)",
+  "DriverHint": "KONICA MINOLTA Universal PCL6",
+  "Path": "Drivers\\KonicaMinolta_UPD",
+  "Url": "",
+  "Enabled": true
+}
+```
+
+- `Path` is a folder holding the extracted driver (`.inf` + `.cat` + `.dll`). For Konica Minolta: download the Universal PCL6 driver from Konica Minolta's support site, extract the ZIP into `Drivers\KonicaMinolta_UPD\`.
+- Or set `Url` to a direct driver ZIP link and the script downloads + extracts it.
+- Or type an `.inf` path directly when asked.
+- The driver is imported with `pnputil`, and its real name is auto-detected (works on French and English Windows). `DriverHint` is only a fallback.
+- Set `"Enabled": false` to hide a manufacturer without deleting it.
+
 ---
 
 ## 🔒 Important security notes
@@ -267,6 +293,8 @@ Default entry in `Software.json`:
 | Nothing happens after double-click | Right-click `Run-Setup.bat` → **Run as administrator**, and approve UAC. Check `Logs\setup-*.log`. |
 | `Failed when opening sources` / exit `1978335217` | Corrupt Winget source DB (the script now auto-resets once). Manual fix: `winget source reset --force`, then `winget source update`, then rerun. Update App Installer: https://aka.ms/getwinget. If logged in as built-in Administrator, try a regular admin account instead. |
 | Installer hash mismatch (can't override as admin) | Stale Winget manifest. The script now falls back to the vendor's direct download when `FallbackUrl` is set (Chrome included). Or wait a day and rerun after `winget source update`. |
+| Printer: `pnputil failed` | Wrong driver package for this Windows (x86 vs x64) or a corrupt INF. Re-download the vendor's 64-bit driver. |
+| Printer: no driver presets | Enable entries in `PrinterDrivers` in `Software.json`, or type an `.inf` path when asked. |
 | New username doesn't show | Sign out and back in, or restart. |
 
 Logs are in `Logs\setup-YYYYMMDD-HHMMSS.log` (transcript of the whole run).
