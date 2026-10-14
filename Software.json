@@ -1,0 +1,84 @@
+{
+  "Apps": [
+    {
+      "Name": "Google Chrome",
+      "Type": "winget",
+      "Id": "Google.Chrome",
+      "Enabled": true
+    },
+    {
+      "Name": "Mozilla Firefox",
+      "Type": "winget",
+      "Id": "Mozilla.Firefox",
+      "Enabled": true
+    },
+    {
+      "Name": "7-Zip",
+      "Type": "winget",
+      "Id": "7zip.7zip",
+      "Enabled": true
+    },
+    {
+      "Name": "VLC media player",
+      "Type": "winget",
+      "Id": "VideoLAN.VLC",
+      "Enabled": true
+    },
+    {
+      "Name": "Adobe Acrobat Reader",
+      "Type": "winget",
+      "Id": "Adobe.Acrobat.Reader.64-bit",
+      "Enabled": true
+    },
+    {
+      "Name": "Notepad++",
+      "Type": "winget",
+      "Id": "Notepad++.Notepad++",
+      "Enabled": true
+    },
+    {
+      "Name": "Visual Studio Code",
+      "Type": "winget",
+      "Id": "Microsoft.VisualStudioCode",
+      "Enabled": true
+    },
+    {
+      "Name": "Git",
+      "Type": "winget",
+      "Id": "Git.Git",
+      "Enabled": true
+    },
+    {
+      "Name": "Microsoft PowerToys",
+      "Type": "winget",
+      "Id": "Microsoft.PowerToys",
+      "Enabled": true
+    },
+    {
+      "Name": "Zoom Workplace",
+      "Type": "winget",
+      "Id": "Zoom.Zoom",
+      "Enabled": true
+    },
+    {
+      "Name": "WhatsApp",
+      "Type": "winget",
+      "Id": "WhatsApp.WhatsApp",
+      "Enabled": true
+    },
+    {
+      "Name": "LibreOffice",
+      "Type": "winget",
+      "Id": "TheDocumentFoundation.LibreOffice",
+      "Enabled": true
+    }
+  ],
+  "LocalInstallers": [
+    {
+      "Name": "Microsoft Office (OfficeSetup.exe)",
+      "Path": "OfficeSetup.exe",
+      "Arguments": [],
+      "Enabled": true
+    }
+  ]
+}
