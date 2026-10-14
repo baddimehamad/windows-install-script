@@ -25,7 +25,7 @@ When you run the tool you get a main menu with 3 actions:
 
 | # | Action | Description |
 |---|--------|-------------|
-| 1 | **Enable built-in Administrator** | Enables the hidden Administrator account (SID ending in `-500`) and prompts you to enter a new password. Requires typing `YES` to confirm. |
+| 1 | **Enable built-in Administrator** | Enables the hidden Administrator account (SID ending in `-500`, so `Administrator` or `Administrateur`) and prompts you to enter a new password. Type `YES`/`OUI` (any case) to confirm. |
 | 2 | **Rename current local user** | Renames the local account you were signed in with (name + display name). Does **not** rename `C:\Users\OldName`. |
 | 3 | **Install software** | Shows a numbered list from `Software.json`. Install only what you pick, e.g. `1,3,5`, or `A` for all, `0` to skip. |
 | 4 | **Run all** | Runs 1 + 2 + 3 in order. |
@@ -74,7 +74,7 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
 2. **(Optional) Add Office:** copy your `OfficeSetup.exe` next to `Install-MyPC.ps1` (same folder as `Run-Setup.bat`).
 3. **Run:** double-click **`Run-Setup.bat`** → approve the UAC prompt.
 4. **Choose:** enter e.g. `4` to run everything, or `1,3` for Administrator + software only.
-   - If you chose option 1, type `YES` to confirm, then enter a new Administrator password when asked (minimum 8 characters), then confirm it. Leave blank to cancel.
+   - If you chose option 1, type `YES`/`OUI` (any case: yes, Yes, oui...) to confirm, then enter a new password when asked (minimum 8 characters), then confirm it. Leave blank to cancel.
 5. **Pick software:** enter numbers like `1,3,5`, or `A` for all, or `0` to skip.
 6. **Done:** check the summary at the end. If anything failed, open the `Logs` folder.
 

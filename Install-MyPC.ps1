@@ -48,33 +48,66 @@ function Ask-YesNo {
     return ($answer.Trim().ToLowerInvariant() -in @('y', 'yes'))
 }
 
+function Get-BuiltInAdminAccount {
+    # Language-agnostic: finds SID ending in -500, so it works whether
+    # the account is named Administrator (EN) or Administrateur (FR).
+    try {
+        $found = Get-LocalUser -ErrorAction Stop | Where-Object { $_.SID.Value -match '-500$' } | Select-Object -First 1
+        if ($null -ne $found) { return $found }
+    } catch {}
+    # Fallback for editions where Get-LocalUser is unavailable: try well-known names.
+    foreach ($name in @('Administrator', 'Administrateur')) {
+        try {
+            $fallback = Get-LocalUser -Name $name -ErrorAction Stop
+            if ($null -ne $fallback) { return $fallback }
+        } catch {}
+        try {
+            net user $name 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                return [PSCustomObject]@{ Name = $name; SID = $null; Enabled = $null; Fallback = $true }
+            }
+        } catch {}
+    }
+    return $null
+}
+
 function Configure-BuiltInAdministrator {
     Write-Host ''
-    Write-Host 'This will enable the built-in Administrator account (SID ending in -500).' -ForegroundColor Yellow
-    Write-Host 'Step 1: confirm. Step 2: you will be asked to enter a new password for that account.' -ForegroundColor Yellow
-    $confirmation = Read-Host 'Type YES to continue, or anything else to cancel'
-    if ($confirmation -cne 'YES') {
-        Write-Host 'Administrator account change cancelled.' -ForegroundColor DarkYellow
+    # Look up FIRST so French PCs see their real name before confirming.
+    $administratorAccount = Get-BuiltInAdminAccount
+    if ($null -eq $administratorAccount) {
+        Write-Host 'Could not find the built-in Administrator account (SID ending in -500).' -ForegroundColor Red
+        Write-Host 'Introuvable : compte administrateur integre (SID se terminant par -500).' -ForegroundColor Red
+        $script:failed.Add('Built-in Administrator configuration failed: account not found')
+        return
+    }
+    $adminName = $administratorAccount.Name
+    $enabledState = ''
+    if ($null -ne $administratorAccount.Enabled) {
+        $enabledState = if ($administratorAccount.Enabled) { ' (currently enabled / actuellement active)' } else { ' (currently disabled / actuellement desactive)' }
+    }
+    Write-Host ("Found built-in account: '{0}'{1} [SID ending in -500]. Works in English and French." -f $adminName, $enabledState) -ForegroundColor Cyan
+    Write-Host 'This will enable it and set a new password that you enter (hidden input).' -ForegroundColor Yellow
+    Write-Host 'Cela va activer ce compte et definir un nouveau mot de passe que vous saisissez.' -ForegroundColor Yellow
+    $confirmation = ((Read-Host 'Type YES/OUI (or Y/O) to continue, anything else to cancel') | ForEach-Object { "$_".Trim() })
+    # Case-insensitive on purpose: yes, YES, Yes, oui, OUI all work.
+    if ($confirmation -notin @('YES', 'Y', 'OUI', 'O')) {
+        Write-Host ("Cancelled (you typed '{0}'). No change was made. / Annule." -f $confirmation) -ForegroundColor DarkYellow
         return
     }
 
     try {
-        $administratorAccount = Get-LocalUser -ErrorAction Stop | Where-Object { $_.SID.Value -match '-500$' } | Select-Object -First 1
-        if ($null -eq $administratorAccount) {
-            throw 'Could not find the built-in Administrator account (SID ending in -500).'
-        }
-
         Write-Host ''
-        Write-Host 'Step: enter a new password for the built-in Administrator account.' -ForegroundColor White
-        Write-Host 'Password input is hidden. Use a strong, unique password for this machine.' -ForegroundColor Yellow
-        $securePassword = Read-Host 'Enter new Administrator password (leave blank to cancel)' -AsSecureString
+        Write-Host ("Step: enter a new password for '{0}'. / Etape : nouveau mot de passe." -f $adminName) -ForegroundColor White
+        Write-Host 'Password input is hidden. Minimum 8 characters. / Saisie masquee. 8 caracteres minimum.' -ForegroundColor Yellow
+        $securePassword = Read-Host ("Enter new password for '{0}' (leave blank to cancel)" -f $adminName) -AsSecureString
         if ($null -eq $securePassword -or $securePassword.Length -eq 0) {
             Write-Host 'Administrator account change cancelled (no password entered).' -ForegroundColor DarkYellow
             return
         }
-        $confirmPassword = Read-Host 'Confirm new Administrator password' -AsSecureString
+        $confirmPassword = Read-Host 'Confirm new password / Confirmez le mot de passe' -AsSecureString
         if ($null -eq $confirmPassword -or $confirmPassword.Length -eq 0) {
-            Write-Host 'Administrator account change cancelled (confirmation was empty).' -ForegroundColor DarkYellow
+            Write-Host 'Cancelled (confirmation was empty). / Annule.' -ForegroundColor DarkYellow
             return
         }
 
@@ -82,12 +115,12 @@ function Configure-BuiltInAdministrator {
         $plainConfirm = [System.Net.NetworkCredential]::new('', $confirmPassword).Password
         try {
             if ($plainFirst -cne $plainConfirm) {
-                Write-Host 'Passwords do not match. Administrator account was not changed.' -ForegroundColor Yellow
+                Write-Host 'Passwords do not match. Account was not changed. / Mots de passe differents.' -ForegroundColor Yellow
                 $script:failed.Add('Built-in Administrator configuration skipped: passwords did not match')
                 return
             }
             if ($plainFirst.Length -lt 8) {
-                Write-Host 'Password must be at least 8 characters. Administrator account was not changed.' -ForegroundColor Yellow
+                Write-Host 'Password must be at least 8 characters. Account was not changed. / 8 caracteres minimum.' -ForegroundColor Yellow
                 $script:failed.Add('Built-in Administrator configuration skipped: password too short')
                 return
             }
@@ -96,9 +129,39 @@ function Configure-BuiltInAdministrator {
             $plainConfirm = $null
         }
 
-        Set-LocalUser -Name $administratorAccount.Name -Password $securePassword -ErrorAction Stop
-        Enable-LocalUser -Name $administratorAccount.Name -ErrorAction Stop
-        Write-Host ("Enabled built-in Administrator account '{0}' and set the password you entered." -f $administratorAccount.Name) -ForegroundColor Green
+        $activated = $false
+        try {
+            Set-LocalUser -Name $adminName -Password $securePassword -ErrorAction Stop
+            Enable-LocalUser -Name $adminName -ErrorAction Stop
+            $activated = $true
+        } catch {
+            # Fallback for editions where the LocalUser cmdlets are limited: net user works in EN and FR.
+            Write-Host ("LocalUser cmdlet failed ({0}), trying 'net user' fallback..." -f $_.Exception.Message) -ForegroundColor Yellow
+            $plainPwd = [System.Net.NetworkCredential]::new('', $securePassword).Password
+            try {
+                & net user $adminName $plainPwd 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "net user set password failed (exit $LASTEXITCODE)." }
+                & net user $adminName /active:yes 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "net user /active:yes failed (exit $LASTEXITCODE)." }
+                $activated = $true
+            } finally {
+                $plainPwd = $null
+            }
+        }
+        if (-not $activated) { throw 'Activation failed with both LocalUser cmdlets and net user fallback.' }
+
+        # Verify so the user sees proof, in either language.
+        try {
+            $check = Get-LocalUser -Name $adminName -ErrorAction Stop
+            if ($check.Enabled) {
+                Write-Host ("Enabled built-in account '{0}' and set the password you entered. / Compte '{0}' active." -f $adminName) -ForegroundColor Green
+            } else {
+                Write-Host ("Password set for '{0}', but Windows still reports it as disabled." -f $adminName) -ForegroundColor Yellow
+                $script:failed.Add('Built-in Administrator password set but account still disabled')
+            }
+        } catch {
+            Write-Host ("Enabled built-in account '{0}' and set the password you entered. (Verification skipped.)" -f $adminName) -ForegroundColor Green
+        }
         Write-Host 'Use a unique password per machine, especially on business or internet-exposed computers.' -ForegroundColor Yellow
     } catch {
         Write-Host ("Could not configure the built-in Administrator account: {0}" -f $_.Exception.Message) -ForegroundColor Red
