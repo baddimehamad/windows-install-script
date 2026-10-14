@@ -236,6 +236,7 @@ Default entry in `Software.json`:
 | `Software.json could not be parsed` | You broke the JSON (missing comma/quote). Validate it at https://jsonlint.com |
 | Local installer `FILE NOT FOUND` | Check the `Path` in `Software.json` — relative to the script folder. |
 | Nothing happens after double-click | Right-click `Run-Setup.bat` → **Run as administrator**, and approve UAC. Check `Logs\setup-*.log`. |
+| `Failed when opening sources` / exit `1978335217` | Corrupt Winget source DB (the script now auto-resets once). Manual fix: `winget source reset --force`, then `winget source update`, then rerun. Update App Installer: https://aka.ms/getwinget. If logged in as built-in Administrator, try a regular admin account instead. |
 | New username doesn't show | Sign out and back in, or restart. |
 
 Logs are in `Logs\setup-YYYYMMDD-HHMMSS.log` (transcript of the whole run).

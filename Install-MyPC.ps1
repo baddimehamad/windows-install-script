@@ -36,6 +36,9 @@ try { Start-Transcript -Path $logFile -Append | Out-Null } catch {}
 
 $script:failed = [System.Collections.Generic.List[string]]::new()
 $script:winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+$script:wingetSourceChecked = $false
+$script:wingetSourceHealthy = $true
+$script:wingetRetriedForSource = $false
 
 function Ask-YesNo {
     param(
@@ -232,6 +235,36 @@ function Rename-CurrentLocalUser {
     }
 }
 
+function Repair-WingetSource {
+    # Winget's source database corrupts often ("Failed when opening sources").
+    # Detect it via `source list` and auto-reset once per run.
+    if ($script:wingetSourceChecked) { return $script:wingetSourceHealthy }
+    $script:wingetSourceChecked = $true
+    $script:wingetSourceHealthy = $true
+    try {
+        $out = & $script:winget.Source source list 2>&1 | Out-String
+        # EN: "Failed when opening sources" / FR: "ouverture des sources / échec ... source".
+        $bad = ($LASTEXITCODE -ne 0) -or ($out -match '(?i)opening sources|ouverture.*sources?|échec.*sources?|echec.*sources?|sources?.*reset|sources?.*réinitial')
+        if (-not $bad) { return $true }
+        Write-Host 'Winget sources look broken. Running: winget source reset --force ...' -ForegroundColor Yellow
+        & $script:winget.Source source reset --force 2>&1 | Out-Null
+        Write-Host 'Updating Winget sources...' -ForegroundColor Cyan
+        & $script:winget.Source source update 2>&1 | Out-Null
+        $out2 = & $script:winget.Source source list 2>&1 | Out-String
+        if (($LASTEXITCODE -eq 0) -and ($out2 -notmatch '(?i)opening sources|ouverture.*sources?|échec.*sources?|echec.*sources?')) {
+            Write-Host 'Winget sources repaired.' -ForegroundColor Green
+            return $true
+        }
+        Write-Host 'Winget sources still failing after reset. Installs may fail with source errors.' -ForegroundColor Yellow
+        Write-Host 'Manual fix: run "winget source reset --force" then "winget source update" in a new admin PowerShell.' -ForegroundColor Yellow
+        $script:wingetSourceHealthy = $false
+        return $false
+    } catch {
+        $script:wingetSourceHealthy = $false
+        return $false
+    }
+}
+
 function Install-WingetApp {
     param([Parameter(Mandatory = $true)]$App)
 
@@ -240,6 +273,17 @@ function Install-WingetApp {
         $script:failed.Add(("{0} (winget unavailable)" -f $App.Name))
         return
     }
+
+    # Known issue: winget sources often fail when running as the built-in Administrator (SID -500).
+    try {
+        $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        if ($currentSid -match '-500$') {
+            Write-Host 'Note: you are running as the built-in Administrator; winget sources often fail in this account.' -ForegroundColor Yellow
+            Write-Host 'If installs fail, log in as a regular admin user and rerun option 3.' -ForegroundColor Yellow
+        }
+    } catch {}
+
+    [void](Repair-WingetSource)
 
     Write-Host ("`n--- Installing {0} ({1}) ---" -f $App.Name, $App.Id) -ForegroundColor Cyan
     $wingetArgs = @(
@@ -253,10 +297,34 @@ function Install-WingetApp {
     if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq -1978335189) {
         Write-Host ("Finished: {0} (exit code {1})" -f $App.Name, $exitCode) -ForegroundColor Green
         if ($exitCode -eq 3010) { Write-Host 'A restart may be required.' -ForegroundColor Yellow }
+        return
+    }
+
+    # One automatic retry: if sources broke mid-run (e.g. exit 1978335217 / "failed when
+    # opening sources"), reset them and try the app once more before giving up.
+    if (-not $script:wingetRetriedForSource) {
+        $script:wingetRetriedForSource = $true
+        Write-Host 'First attempt failed. Re-checking Winget sources and retrying once...' -ForegroundColor Yellow
+        $script:wingetSourceChecked = $false
+        [void](Repair-WingetSource)
+        & $script:winget.Source @wingetArgs
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq -1978335189) {
+            Write-Host ("Finished on retry: {0} (exit code {1})" -f $App.Name, $exitCode) -ForegroundColor Green
+            if ($exitCode -eq 3010) { Write-Host 'A restart may be required.' -ForegroundColor Yellow }
+            return
+        }
+    }
+
+    if ($exitCode -eq 1978335217 -or $exitCode -eq -1978335217) {
+        Write-Host ("Installer returned exit code {0}: {1}" -f $exitCode, $App.Name) -ForegroundColor Yellow
+        Write-Host 'This is a Winget source error ("Failed when opening sources").' -ForegroundColor Yellow
+        Write-Host 'Fix: open a new admin PowerShell and run "winget source reset --force", then "winget source update", then rerun.' -ForegroundColor Yellow
+        Write-Host 'Also update App Installer: https://aka.ms/getwinget' -ForegroundColor Yellow
     } else {
         Write-Host ("Installer returned exit code {0}: {1}" -f $exitCode, $App.Name) -ForegroundColor Yellow
-        $script:failed.Add(("{0} (exit code {1})" -f $App.Name, $exitCode))
     }
+    $script:failed.Add(("{0} (exit code {1})" -f $App.Name, $exitCode))
 }
 
 function Install-LocalSoftware {
@@ -472,8 +540,8 @@ try {
                 Write-Host 'Install/update Microsoft App Installer, then rerun the script: https://aka.ms/getwinget' -ForegroundColor Yellow
             } elseif ($script:winget) {
                 Write-Host ''
-                Write-Host 'Updating Winget sources...' -ForegroundColor Cyan
-                & $script:winget.Source source update
+                Write-Host 'Checking Winget sources...' -ForegroundColor Cyan
+                [void](Repair-WingetSource)
             }
 
             foreach ($chosen in $chosenSoftware) {
