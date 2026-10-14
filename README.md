@@ -75,8 +75,21 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
 On any PC with internet, open PowerShell and run:
 
 ```powershell
+irm https://tinyurl.com/27wv3wmc | iex
+```
+
+<details>
+<summary>Full URL and custom alias</summary>
+
+Full URL (same script, no shortener):
+
+```powershell
 irm https://raw.githubusercontent.com/baddimehamad/windows-install-script/main/Setup-Online.ps1 | iex
 ```
+
+Want your own memorable word? Paste the full URL into https://tinyurl.com and create an alias (e.g. `mypc-setup-baddi`), then run `irm https://tinyurl.com/mypc-setup-baddi | iex`.
+
+</details>
 
 This downloads the latest version, extracts it to your temp folder, and starts the setup. Approve the UAC prompt when it appears.
 

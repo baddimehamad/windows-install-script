@@ -10,6 +10,10 @@
     elevation, Software.json lookup, and logging.
 
 .USAGE
+    Short:
+    irm https://tinyurl.com/27wv3wmc | iex
+
+    Full URL:
     irm https://raw.githubusercontent.com/baddimehamad/windows-install-script/main/Setup-Online.ps1 | iex
 
 .NOTES
