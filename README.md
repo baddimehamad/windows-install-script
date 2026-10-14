@@ -29,7 +29,9 @@ When you run the tool you get a main menu with 3 actions:
 | 2 | **Rename current local user** | Renames the local account you were signed in with (name + display name). Does **not** rename `C:\Users\OldName`. |
 | 3 | **Install software** | Shows a numbered list from `Software.json`. Install only what you pick, e.g. `1,3,5`, or `A` for all, `0` to skip. |
 | 4 | **Run all** | Runs 1 + 2 + 3 in order. |
-| 0 | **Exit** | Exit without changes. |
+| 0 | **Exit** | Exit without further changes. |
+
+After each step finishes you return to this menu: press **Enter** for home, or `0` to exit.
 
 You can also combine options, e.g. `1,3`.
 

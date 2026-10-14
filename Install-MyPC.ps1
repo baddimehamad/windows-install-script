@@ -481,13 +481,6 @@ function Select-SoftwareToInstall {
 }
 
 try {
-    Clear-Host
-    Write-Host '========================================================' -ForegroundColor Cyan
-    Write-Host '              WINDOWS AUTOMATIC SETUP' -ForegroundColor Cyan
-    Write-Host '========================================================' -ForegroundColor Cyan
-    Write-Host ("Log file: {0}" -f $logFile)
-    Write-Host ''
-
     $configPath = Join-Path $scriptRoot 'Software.json'
     if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
         throw "Software.json was not found at $configPath. Restore the configuration file and run the setup again."
@@ -498,19 +491,32 @@ try {
         throw "Could not parse Software.json. Check that it contains valid JSON. Details: $($_.Exception.Message)"
     }
 
-    Write-Host 'Choose what you want to do:' -ForegroundColor White
+    while ($true) {
+    $script:failed.Clear()
+    $script:wingetRetriedForSource = $false
+    Clear-Host
+    Write-Host '========================================================' -ForegroundColor Cyan
+    Write-Host '              WINDOWS AUTOMATIC SETUP' -ForegroundColor Cyan
+    Write-Host '========================================================' -ForegroundColor Cyan
+    Write-Host ("Log file: {0}" -f $logFile)
+    Write-Host ''
+
+    Write-Host 'Choose what you want to do: / Choisissez :' -ForegroundColor White
     Write-Host '  1. Enable built-in Administrator and set a new password (you will enter it)'
     Write-Host '  2. Rename the currently signed-in local user account'
     Write-Host '  3. Choose software to install from a numbered list'
     Write-Host '  4. Run all three options'
-    Write-Host '  0. Exit'
+    Write-Host '  0. Exit / Quitter'
     Write-Host ''
     Write-Host 'You can choose more than one option, for example: 1,3'
 
-    $mainChoice = (Read-Host 'Enter option number(s)').Trim()
-    if ([string]::IsNullOrWhiteSpace($mainChoice) -or $mainChoice -eq '0') {
-        Write-Host 'No changes requested. Exiting.' -ForegroundColor DarkYellow
-        return
+    $mainChoice = ((Read-Host 'Enter option number(s)') | ForEach-Object { "$_".Trim() })
+    if ($mainChoice -match '^(?i:0|q|quit|exit)$') {
+        Write-Host 'Exiting without further changes. / Fin.' -ForegroundColor DarkYellow
+        break
+    }
+    if ([string]::IsNullOrWhiteSpace($mainChoice)) {
+        continue
     }
 
     if ($mainChoice -eq '4') {
@@ -521,8 +527,8 @@ try {
         $invalidActions = @($actions | Where-Object { $_ -notin $validActions })
         if ($invalidActions.Count -gt 0) {
             Write-Host 'Invalid main-menu selection. Use 1, 2, 3, 4, or 0. Example: 1,3' -ForegroundColor Yellow
-            Read-Host 'Press Enter to close'
-            return
+            Read-Host 'Press Enter for main menu / Entree = menu principal'
+            continue
         }
     }
 
@@ -557,8 +563,8 @@ try {
     }
 
     Write-Host ''
-    Write-Host '========================================================' -ForegroundColor Cyan
-    Write-Host 'SETUP FINISHED' -ForegroundColor Green
+    Write-Host '--------------------------------------------------------' -ForegroundColor Cyan
+    Write-Host 'STEP FINISHED / ETAPE TERMINEE' -ForegroundColor Green
     Write-Host ("Log file: {0}" -f $logFile)
     if ($script:failed.Count -gt 0) {
         Write-Host 'Some actions or applications may not have completed:' -ForegroundColor Yellow
@@ -568,7 +574,13 @@ try {
         Write-Host 'No errors were recorded for actions/software that were attempted.' -ForegroundColor Green
     }
     Write-Host 'A sign-out or restart may be needed for account-name changes and some installers.' -ForegroundColor Yellow
-    Read-Host 'Press Enter to close'
+    Write-Host ''
+    $next = ((Read-Host 'Press Enter for HOME menu, or type 0 to exit / Entree = menu, 0 = quitter') | ForEach-Object { "$_".Trim() })
+    if ($next -match '^(?i:0|q|quit|exit)$') {
+        Write-Host 'Exiting. / Fin.' -ForegroundColor DarkYellow
+        break
+    }
+    } # end while(menu)
 } catch {
     Write-Host ("SETUP ERROR: {0}" -f $_.Exception.Message) -ForegroundColor Red
     Write-Host ("Log file: {0}" -f $logFile)
