@@ -165,6 +165,16 @@ Add an object to the `Apps` array:
 
 - Find the ID with: `winget search <app-name>` (e.g. `winget search vlc` → `VideoLAN.VLC`)
 - Set `"Enabled": false` to hide it from the menu without deleting it.
+- Optional `"FallbackUrl"`: direct vendor download used automatically if Winget fails (e.g. hash mismatch, which Winget won't override as admin). Chrome already has one:
+  ```json
+  {
+    "Name": "Google Chrome",
+    "Type": "winget",
+    "Id": "Google.Chrome",
+    "FallbackUrl": "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi",
+    "Enabled": true
+  }
+  ```
 - Keep valid JSON: double quotes, commas between objects.
 
 ### Add your own `.exe` / `.msi` installer
@@ -256,6 +266,7 @@ Default entry in `Software.json`:
 | Local installer `FILE NOT FOUND` | Check the `Path` in `Software.json` — relative to the script folder. |
 | Nothing happens after double-click | Right-click `Run-Setup.bat` → **Run as administrator**, and approve UAC. Check `Logs\setup-*.log`. |
 | `Failed when opening sources` / exit `1978335217` | Corrupt Winget source DB (the script now auto-resets once). Manual fix: `winget source reset --force`, then `winget source update`, then rerun. Update App Installer: https://aka.ms/getwinget. If logged in as built-in Administrator, try a regular admin account instead. |
+| Installer hash mismatch (can't override as admin) | Stale Winget manifest. The script now falls back to the vendor's direct download when `FallbackUrl` is set (Chrome included). Or wait a day and rerun after `winget source update`. |
 | New username doesn't show | Sign out and back in, or restart. |
 
 Logs are in `Logs\setup-YYYYMMDD-HHMMSS.log` (transcript of the whole run).

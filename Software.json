@@ -4,6 +4,7 @@
       "Name": "Google Chrome",
       "Type": "winget",
       "Id": "Google.Chrome",
+      "FallbackUrl": "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi",
       "Enabled": true
     },
     {

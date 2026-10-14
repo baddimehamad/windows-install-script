@@ -265,6 +265,79 @@ function Repair-WingetSource {
     }
 }
 
+function Install-FileWithSilentDefaults {
+    # Runs an .msi via msiexec (/qn) or an .exe with the given args. Returns the exit code.
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$ExtraArgs = @()
+    )
+    $extension = [System.IO.Path]::GetExtension($FilePath).ToLowerInvariant()
+    $workingDirectory = Split-Path -Parent $FilePath
+    if ($extension -eq '.msi') {
+        $processFile = Join-Path $env:WINDIR 'System32\msiexec.exe'
+        $argumentParts = @('/i', ('"{0}"' -f $FilePath), '/qn', '/norestart') + $ExtraArgs
+    } else {
+        $processFile = $FilePath
+        $argumentParts = $ExtraArgs
+    }
+    $startParameters = @{
+        FilePath         = $processFile
+        WorkingDirectory = $workingDirectory
+        Wait             = $true
+        PassThru         = $true
+        ErrorAction      = 'Stop'
+    }
+    if ($argumentParts.Count -gt 0) {
+        $startParameters.ArgumentList = ($argumentParts -join ' ')
+    }
+    $process = Start-Process @startParameters
+    return $process.ExitCode
+}
+
+function Install-WingetFallbackUrl {
+    # Direct-download fallback when winget itself fails (e.g. hash mismatch,
+    # which winget refuses to override while running as admin).
+    param([Parameter(Mandatory = $true)]$App)
+    $fallbackUrl = ''
+    if ($null -ne $App.FallbackUrl) { $fallbackUrl = ([string]$App.FallbackUrl).Trim() }
+    if ([string]::IsNullOrWhiteSpace($fallbackUrl)) { return $false }
+    try {
+        $uri = [System.Uri]$fallbackUrl
+        $fileName = [System.IO.Path]::GetFileName($uri.LocalPath)
+        if ([string]::IsNullOrWhiteSpace($fileName) -or -not $fileName.Contains('.')) {
+            $safe = ($App.Name -replace '[^\w\-]+', '_').Trim('_')
+            $fileName = "$safe.exe"
+        }
+        $destDir = Join-Path $script:scriptRoot 'Installers'
+        New-Item -ItemType Directory -Path $destDir -Force -ErrorAction Stop | Out-Null
+        $destPath = Join-Path $destDir $fileName
+        if (-not (Test-Path -LiteralPath $destPath -PathType Leaf)) {
+            Write-Host ("Downloading fallback for {0} ..." -f $App.Name) -ForegroundColor Cyan
+            $dlParams = @{ Uri = $fallbackUrl; OutFile = $destPath; ErrorAction = 'Stop' }
+            if ($PSVersionTable.PSVersion.Major -le 5) { $dlParams['UseBasicParsing'] = $true }
+            Invoke-WebRequest @dlParams
+        } else {
+            Write-Host ("Reusing previously downloaded fallback: {0}" -f $destPath) -ForegroundColor DarkGray
+        }
+        $fallbackArgs = @()
+        if ($null -ne $App.FallbackArgs) { $fallbackArgs = @($App.FallbackArgs | ForEach-Object { [string]$_ }) }
+        Write-Host ("`n--- Installing {0} (direct download fallback) ---" -f $App.Name) -ForegroundColor Cyan
+        $exitCode = Install-FileWithSilentDefaults -FilePath $destPath -ExtraArgs $fallbackArgs
+        if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq 1641) {
+            Write-Host ("Finished via fallback: {0} (exit code {1})" -f $App.Name, $exitCode) -ForegroundColor Green
+            if ($exitCode -in @(3010, 1641)) { Write-Host 'A restart may be required.' -ForegroundColor Yellow }
+            return $true
+        }
+        Write-Host ("Fallback installer returned exit code {0}: {1}" -f $exitCode, $App.Name) -ForegroundColor Yellow
+        $script:failed.Add(("{0} (fallback exit code {1})" -f $App.Name, $exitCode))
+        return $true  # attempted
+    } catch {
+        Write-Host ("Fallback download/install failed for {0}: {1}" -f $App.Name, $_.Exception.Message) -ForegroundColor Red
+        $script:failed.Add(("{0} (fallback failed)" -f $App.Name))
+        return $true  # attempted
+    }
+}
+
 function Install-WingetApp {
     param([Parameter(Mandatory = $true)]$App)
 
@@ -291,13 +364,22 @@ function Install-WingetApp {
         '--silent', '--accept-package-agreements', '--accept-source-agreements',
         '--disable-interactivity'
     )
-    & $script:winget.Source @wingetArgs
+    # Capture output so hash-mismatch (EN "hash" / FR "hachage") can be detected in any language.
+    $wingetOut = & $script:winget.Source @wingetArgs 2>&1 | Out-String
+    Write-Host $wingetOut
     $exitCode = $LASTEXITCODE
+    $hashMismatch = $wingetOut -match '(?i)hash|hachage|mismatch|non concordance|ne correspond pas'
     # 0x8A15002B is Winget's "already installed" result on common versions.
     if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq -1978335189) {
         Write-Host ("Finished: {0} (exit code {1})" -f $App.Name, $exitCode) -ForegroundColor Green
         if ($exitCode -eq 3010) { Write-Host 'A restart may be required.' -ForegroundColor Yellow }
         return
+    }
+
+    if ($hashMismatch) {
+        Write-Host 'Winget reports an installer hash mismatch (stale manifest on the server side).' -ForegroundColor Yellow
+        Write-Host 'Winget refuses "--ignore-security-hash" while running as administrator, so trying direct download instead.' -ForegroundColor Yellow
+        if (Install-WingetFallbackUrl -App $App) { return }
     }
 
     # One automatic retry: if sources broke mid-run (e.g. exit 1978335217 / "failed when
@@ -307,13 +389,24 @@ function Install-WingetApp {
         Write-Host 'First attempt failed. Re-checking Winget sources and retrying once...' -ForegroundColor Yellow
         $script:wingetSourceChecked = $false
         [void](Repair-WingetSource)
-        & $script:winget.Source @wingetArgs
+        $wingetOut = & $script:winget.Source @wingetArgs 2>&1 | Out-String
+        Write-Host $wingetOut
         $exitCode = $LASTEXITCODE
+        if ($wingetOut -match '(?i)hash|hachage|mismatch|non concordance|ne correspond pas') {
+            Write-Host 'Retry also reports a hash mismatch; trying direct download instead.' -ForegroundColor Yellow
+            if (Install-WingetFallbackUrl -App $App) { return }
+        }
         if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq -1978335189) {
             Write-Host ("Finished on retry: {0} (exit code {1})" -f $App.Name, $exitCode) -ForegroundColor Green
             if ($exitCode -eq 3010) { Write-Host 'A restart may be required.' -ForegroundColor Yellow }
             return
         }
+    }
+
+    # Last resort for apps with a configured direct download: better than a bare failure.
+    if (($null -ne $App.FallbackUrl) -and (-not [string]::IsNullOrWhiteSpace([string]$App.FallbackUrl))) {
+        Write-Host ("Winget failed for {0}; trying configured direct download..." -f $App.Name) -ForegroundColor Yellow
+        if (Install-WingetFallbackUrl -App $App) { return }
     }
 
     if ($exitCode -eq 1978335217 -or $exitCode -eq -1978335217) {
@@ -424,7 +517,7 @@ function Get-SelectableSoftware {
         [void]$items.Add([PSCustomObject]@{
             Kind = 'winget'
             Name = [string]$app.Name
-            Detail = ("Winget ID: {0}" -f [string]$app.Id)
+            Detail = ("Winget ID: {0}" -f [string]$app.Id) + $(if (($null -ne $app.FallbackUrl) -and (-not [string]::IsNullOrWhiteSpace([string]$app.FallbackUrl))) { ' [+direct-download fallback]' } else { '' })
             Item = $app
         })
     }
