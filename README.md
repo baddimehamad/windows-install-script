@@ -259,7 +259,7 @@ Driver presets live in the `PrinterDrivers` array in `Software.json`:
 }
 ```
 
-- `Path` is a folder holding the extracted driver (`.inf` + `.cat` + `.dll`). For Konica Minolta: download the Universal PCL6 driver from Konica Minolta's support site, extract the ZIP into `Drivers\KonicaMinolta_UPD\`.
+- `Path` is a folder holding the extracted driver (`.inf` + `.cat` + `.dll`). For Konica Minolta: download the Universal PCL6/V4 driver from Konica Minolta's support site, extract the ZIP into `Drivers\konika_minolta\` (already wired in `Software.json`).
 - Or set `Url` to a direct driver ZIP link and the script downloads + extracts it.
 - Or type an `.inf` path directly when asked.
 - The driver is imported with `pnputil`, and its real name is auto-detected (works on French and English Windows). `DriverHint` is only a fallback.

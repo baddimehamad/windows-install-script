@@ -91,9 +91,9 @@
   ],
   "PrinterDrivers": [
     {
-      "Make": "Konica Minolta (Universal PCL6)",
-      "DriverHint": "KONICA MINOLTA Universal PCL6",
-      "Path": "Drivers\\KonicaMinolta_UPD",
+      "Make": "Konica Minolta (Universal V4 PCL)",
+      "DriverHint": "KONICA MINOLTA Universal V4 PCL",
+      "Path": "Drivers\\konika_minolta",
       "Url": "",
       "Enabled": true
     },
