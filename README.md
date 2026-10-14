@@ -52,6 +52,7 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
 11. WhatsApp
 12. LibreOffice
 13. Microsoft Office (`OfficeSetup.exe` — you provide the file, see below)
+14. Microsoft Office Home Business 2024 (Français) — auto-downloaded from Microsoft (~7 MB Click-to-Run setup)
 
 > The numbers are generated from entries with `"Enabled": true` in `Software.json`. Disable/add an entry and the numbers shift automatically.
 
@@ -179,6 +180,22 @@ Add an object to the `Apps` array:
   "Enabled": true
 }
 ```
+
+### Add an installer that downloads from a URL
+
+Add `Url` plus the save location in `Path`. If the file is missing, the script downloads it first, then runs it:
+
+```json
+{
+  "Name": "Microsoft Office Home Business 2024 (Francais)",
+  "Path": "Installers\\Office_HomeBusiness2024_FR_x64.exe",
+  "Url": "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=HomeBusiness2024Retail&platform=x64&language=fr-fr&version=O16GA",
+  "Arguments": [],
+  "Enabled": true
+}
+```
+
+The menu shows `[WILL DOWNLOAD]` for these until the file exists.
 
 - `Path` can be relative (as above) or absolute (`C:\Tools\MyApp.exe`).
 - `Arguments` are passed to the installer. Leave `[]` for default / interactive install.

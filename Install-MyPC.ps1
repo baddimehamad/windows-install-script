@@ -343,6 +343,30 @@ function Install-LocalSoftware {
         $installerPath = Join-Path $script:scriptRoot $relativePath
     }
 
+    $downloadUrl = ''
+    if ($null -ne $Installer.Url) { $downloadUrl = ([string]$Installer.Url).Trim() }
+    if ((-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) -and (-not [string]::IsNullOrWhiteSpace($downloadUrl))) {
+        try {
+            $parentDir = Split-Path -Parent $installerPath
+            if (-not [string]::IsNullOrWhiteSpace($parentDir)) {
+                New-Item -ItemType Directory -Path $parentDir -Force -ErrorAction Stop | Out-Null
+            }
+            Write-Host ("Downloading {0} ..." -f $Installer.Name) -ForegroundColor Cyan
+            Write-Host ("  From: {0}" -f $downloadUrl) -ForegroundColor DarkGray
+            Write-Host ("  To: {0}" -f $installerPath) -ForegroundColor DarkGray
+            $dlParams = @{ Uri = $downloadUrl; OutFile = $installerPath; ErrorAction = 'Stop' }
+            if ($PSVersionTable.PSVersion.Major -le 5) { $dlParams['UseBasicParsing'] = $true }
+            Invoke-WebRequest @dlParams
+            $dlInfo = Get-Item -LiteralPath $installerPath -ErrorAction Stop
+            if ($dlInfo.Length -lt 1024) { throw ("Downloaded file is only {0} bytes." -f $dlInfo.Length) }
+            Write-Host ("Downloaded: {0} ({1:N0} bytes)" -f $Installer.Name, $dlInfo.Length) -ForegroundColor Green
+        } catch {
+            Write-Host ("Download failed for {0}: {1}" -f $Installer.Name, $_.Exception.Message) -ForegroundColor Red
+            $script:failed.Add(("{0} (download failed)" -f $Installer.Name))
+            return
+        }
+    }
+
     if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
         Write-Host ("Not found: {0} ({1})" -f $Installer.Name, $installerPath) -ForegroundColor Yellow
         Write-Host 'Copy the installer to the configured path, or update its Path in Software.json.' -ForegroundColor Yellow
@@ -420,7 +444,12 @@ function Get-SelectableSoftware {
             $detail = $relativePath
         }
         if ([string]::IsNullOrWhiteSpace($fullPath) -or -not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
-            $detail = "$detail [FILE NOT FOUND]"
+            $hasUrl = ($null -ne $installer.Url) -and (-not [string]::IsNullOrWhiteSpace([string]$installer.Url))
+            if ($hasUrl) {
+                $detail = "$detail [WILL DOWNLOAD]"
+            } else {
+                $detail = "$detail [FILE NOT FOUND]"
+            }
         }
         [void]$items.Add([PSCustomObject]@{
             Kind = 'local'
