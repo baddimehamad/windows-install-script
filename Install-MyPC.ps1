@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$OriginalUserSid
 )
 
@@ -243,15 +243,15 @@ function Repair-WingetSource {
     $script:wingetSourceHealthy = $true
     try {
         $out = & $script:winget.Source source list 2>&1 | Out-String
-        # EN: "Failed when opening sources" / FR: "ouverture des sources / échec ... source".
-        $bad = ($LASTEXITCODE -ne 0) -or ($out -match '(?i)opening sources|ouverture.*sources?|échec.*sources?|echec.*sources?|sources?.*reset|sources?.*réinitial')
+        # EN: "Failed when opening sources" / FR: "ouverture des sources / echec ... source".
+        $bad = ($LASTEXITCODE -ne 0) -or ($out -match '(?i)opening sources|ouverture.*sources?|[e\xe9]chec.*sources?|sources?.*reset|sources?.*r[e\xe9]initial')
         if (-not $bad) { return $true }
         Write-Host 'Winget sources look broken. Running: winget source reset --force ...' -ForegroundColor Yellow
         & $script:winget.Source source reset --force 2>&1 | Out-Null
         Write-Host 'Updating Winget sources...' -ForegroundColor Cyan
         & $script:winget.Source source update 2>&1 | Out-Null
         $out2 = & $script:winget.Source source list 2>&1 | Out-String
-        if (($LASTEXITCODE -eq 0) -and ($out2 -notmatch '(?i)opening sources|ouverture.*sources?|échec.*sources?|echec.*sources?')) {
+        if (($LASTEXITCODE -eq 0) -and ($out2 -notmatch '(?i)opening sources|ouverture.*sources?|[e\xe9]chec.*sources?')) {
             Write-Host 'Winget sources repaired.' -ForegroundColor Green
             return $true
         }
@@ -799,12 +799,12 @@ function Select-SoftwareToInstall {
     }
 
     Write-Host ''
-    Write-Host 'SOFTWARE LIST — enter numbers separated by commas (example: 1,3,5).' -ForegroundColor Cyan
+    Write-Host 'SOFTWARE LIST - enter numbers separated by commas (example: 1,3,5).' -ForegroundColor Cyan
     Write-Host 'Enter A to select all enabled items, or 0 to skip software installation.' -ForegroundColor Cyan
     for ($index = 0; $index -lt $Items.Count; $index++) {
         $number = $index + 1
         $kindLabel = if ($Items[$index].Kind -eq 'winget') { 'Winget' } else { 'Local' }
-        Write-Host (" {0,2}. [{1}] {2} — {3}" -f $number, $kindLabel, $Items[$index].Name, $Items[$index].Detail)
+        Write-Host (" {0,2}. [{1}] {2} - {3}" -f $number, $kindLabel, $Items[$index].Name, $Items[$index].Detail)
     }
 
     while ($true) {

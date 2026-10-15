@@ -4,9 +4,12 @@ Logs/
 
 # Local / proprietary installers - do not commit
 OfficeSetup.exe
-*.exe
-*.msi
+Installers/*.exe
+Installers/*.msi
 !Installers/README.txt
+
+# Preserve all driver files
+!Drivers/**
 
 # Windows / editor junk
 Thumbs.db
