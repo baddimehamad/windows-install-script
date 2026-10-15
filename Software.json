@@ -98,6 +98,13 @@
       "Enabled": true
     },
     {
+      "Make": "Xerox (Global Print Driver PCL6)",
+      "DriverHint": "Xerox Global Print Driver PCL6",
+      "Path": "Drivers\\xerox",
+      "Url": "",
+      "Enabled": true
+    },
+    {
       "Make": "HP (Universal PCL6)",
       "DriverHint": "HP Universal Printing PCL 6",
       "Path": "Drivers\\HP_UPD",
