@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$OriginalUserSid
 )
 
@@ -615,18 +615,47 @@ function Install-NetworkPrinter {
     }
     if (-not $skipImport) {
     Write-Host ("Importing driver from {0} ..." -f $infPath) -ForegroundColor Cyan
+
+    # Stage 1: Use pnputil to stage the driver package into the Windows driver store.
+    # For V4 print drivers (ClassVer=4.0), pnputil /install often fails to auto-register
+    # the printer driver even though the package IS staged successfully. We treat
+    # staging as a separate step and don't give up on a non-zero exit code.
     $pnpOut = & pnputil.exe /add-driver "$infPath" /install 2>&1 | Out-String
     $pnpExit = $LASTEXITCODE
-    $pnpOk = ($pnpExit -eq 0) -or ($pnpOut -match '(?i)successfully|already exists')
+    # Accept success in any locale: English "successfully", French "correctement"/"existe deja", etc.
+    $pnpOk = ($pnpExit -eq 0) -or ($pnpOut -match '(?i)successfully|correctement|already exists|existe d')
     $driversAfter = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
     $newDrivers = @($driversAfter | Where-Object { $_ -notin $driversBefore })
     $driverName = ''
-    if ((-not $pnpOk) -and ($newDrivers.Count -eq 0)) {
-        Write-Host $pnpOut -ForegroundColor DarkGray
-        Write-Host 'pnputil import did not register a driver, trying printui fallback...' -ForegroundColor Yellow
+
+    # Stage 2: If pnputil did not auto-register the driver, try Add-PrinterDriver (V4 method).
+    # This is the proper way to install V4 class printer drivers: stage first, then register.
+    if ($newDrivers.Count -eq 0) {
         $fallbackName = [string]$preset.DriverHint
         if (-not [string]::IsNullOrWhiteSpace($fallbackName)) {
+            # Check if it was staged but not yet registered as a printer driver
+            if (-not $pnpOk) {
+                Write-Host $pnpOut -ForegroundColor DarkGray
+            }
+            Write-Host ("Registering V4 driver via Add-PrinterDriver: '{0}' ..." -f $fallbackName) -ForegroundColor Yellow
+            try {
+                Add-PrinterDriver -Name $fallbackName -InfPath $infPath -ErrorAction Stop
+                Write-Host ("Add-PrinterDriver succeeded for '{0}'." -f $fallbackName) -ForegroundColor Green
+            } catch {
+                Write-Host ("Add-PrinterDriver failed: {0}" -f $_.Exception.Message) -ForegroundColor DarkGray
+            }
+            $driversAfter = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+            $newDrivers = @($driversAfter | Where-Object { $_ -notin $driversBefore })
+        }
+    }
+
+    # Stage 3: If still not registered, try the legacy printui.dll method (V3 drivers).
+    if ($newDrivers.Count -eq 0) {
+        $fallbackName = [string]$preset.DriverHint
+        if (-not [string]::IsNullOrWhiteSpace($fallbackName)) {
+            Write-Host 'V4 registration did not work, trying printui fallback (V3 method)...' -ForegroundColor Yellow
             $printuiOut = & rundll32.exe printui.dll,PrintUIEntry /ia /f "$infPath" /m "$fallbackName" 2>&1 | Out-String
+            Start-Sleep -Seconds 3   # printui is async, give it a moment
             $driversAfter = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
             $newDrivers = @($driversAfter | Where-Object { $_ -notin $driversBefore })
             if (($newDrivers.Count -eq 0) -and ($driversAfter -inotcontains $fallbackName)) {
@@ -634,6 +663,8 @@ function Install-NetworkPrinter {
             }
         }
     }
+
+    # --- Pick the driver name from whatever got registered. ---
     if ($newDrivers.Count -eq 1) {
         $driverName = $newDrivers[0]
     } elseif ($newDrivers.Count -gt 1) {
@@ -644,6 +675,7 @@ function Install-NetworkPrinter {
             $driverName = $newDrivers[[int]$drvChoice - 1]
         }
     }
+    # Check by DriverHint even if newDrivers is empty (driver may have been there under a different snapshot)
     if ([string]::IsNullOrWhiteSpace($driverName) -and (-not [string]::IsNullOrWhiteSpace([string]$preset.DriverHint))) {
         $hint = [string]$preset.DriverHint
         $match = @($driversAfter | Where-Object { "$_" -ieq $hint })
@@ -653,6 +685,7 @@ function Install-NetworkPrinter {
         Write-Host 'pnputil output (for diagnosis):' -ForegroundColor Yellow
         Write-Host $pnpOut -ForegroundColor DarkGray
         Write-Host 'The driver package did not register on this Windows.' -ForegroundColor Red
+        Write-Host 'Tip: You may need to download a newer driver from the manufacturer website.' -ForegroundColor Yellow
         @($driversAfter | Select-Object -Last 10) | ForEach-Object { Write-Host (" - {0}" -f $_) }
         $driverName = ((Read-Host 'Type the exact driver name to use') | ForEach-Object { "$_".Trim() })
     }
