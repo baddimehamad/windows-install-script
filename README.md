@@ -28,7 +28,7 @@ When you run the tool you get a main menu with 4 actions:
 | 1 | **Enable built-in Administrator** | Enables the hidden Administrator account (SID ending in `-500`, so `Administrator` or `Administrateur`) and prompts you to enter a new password. Type `YES`/`OUI` (any case) to confirm. |
 | 2 | **Rename current local user** | Renames the local account you were signed in with (name + display name). Does **not** rename `C:\Users\OldName`. |
 | 3 | **Install software** | Shows a numbered list from `Software.json`. Install only what you pick, e.g. `1,3,5`, or `A` for all, `0` to skip. |
-| 4 | **Install a printer** | Pick a manufacturer (e.g. Konica Minolta Universal PCL6), then enter the printer IP/hostname, port (default 9100) and the name for this PC. Creates a local TCP/IP port and installs the printer. |
+| 4 | **Printers** | Submenu: install a printer (pick manufacturer, then IP/hostname, port, name), list installed printers (driver, port, status, default), or rename any printer. |
 | 5 | **Run all** | Runs 1 + 2 + 3 + 4 in order. |
 | 0 | **Exit** | Exit without further changes. |
 
@@ -113,7 +113,7 @@ Choose what you want to do:
   1. Enable built-in Administrator and set a new password (you will enter it)
   2. Rename the currently signed-in local user account
   3. Choose software to install from a numbered list
-  4. Install a printer (TCP/IP: manufacturer, IP, name)
+  4. Printers (install / list / rename)
   5. Run all options (1+2+3+4)
   0. Exit
 
@@ -243,9 +243,11 @@ Default entry in `Software.json`:
 - The script launches it as-is. Unattended install depends on your specific Office installer.
 - Activation still needs a valid license / Microsoft 365 account — this script does not bypass licensing.
 
-### 🖨️ Install a printer (option 4)
+### 🖨️ Printers (option 4)
 
-The script asks: **manufacturer → printer IP/hostname → port (Enter = 9100) → printer name** (default: `<manufacturer> <IP>`). It creates a local TCP/IP port (`TCP_<IP>`) and installs the printer on this PC.
+Option 4 opens a submenu: **1 = install** a printer, **2 = list** installed printers, **3 = rename** a printer, **0 = back**.
+
+Install asks: **manufacturer → printer IP/hostname → port (Enter = 9100) → printer name** (default: `<manufacturer> <IP>`). It creates a local TCP/IP port (`TCP_<IP>`) and installs the printer on this PC. List shows name, driver, port, status and the default printer. Rename lists printers by number and renames the one you pick.
 
 Driver presets live in the `PrinterDrivers` array in `Software.json`:
 

@@ -507,6 +507,101 @@ function Install-LocalSoftware {
     }
 }
 
+function Show-PrinterList {
+    $printers = @(Get-Printer -ErrorAction SilentlyContinue | Sort-Object Name)
+    if ($printers.Count -eq 0) {
+        Write-Host 'No printers installed on this PC. / Aucune imprimante installee.' -ForegroundColor Yellow
+        return @()
+    }
+    $defaultName = ''
+    try {
+        $def = Get-CimInstance -ClassName Win32_Printer -Filter 'Default = TRUE' -ErrorAction Stop
+        if ($null -ne $def) { $defaultName = $def.Name }
+    } catch {}
+    Write-Host ''
+    Write-Host 'INSTALLED PRINTERS / IMPRIMANTES INSTALLEES :' -ForegroundColor Cyan
+    for ($i = 0; $i -lt $printers.Count; $i++) {
+        $tag = ''
+        if ($printers[$i].Name -eq $defaultName) { $tag = ' [DEFAULT / DEFAUT]' }
+        Write-Host (" {0,2}. {1}{2}" -f ($i + 1), $printers[$i].Name, $tag)
+        Write-Host ("     Driver: {0} | Port: {1} | Status: {2}" -f $printers[$i].DriverName, $printers[$i].PortName, $printers[$i].PrinterStatus)
+    }
+    return $printers
+}
+
+function Rename-ChosenPrinter {
+    if (-not (Get-Command Rename-Printer -ErrorAction SilentlyContinue)) {
+        Write-Host 'Rename-Printer is not available on this Windows edition.' -ForegroundColor Red
+        $script:failed.Add('Printer rename skipped: Rename-Printer unavailable')
+        return
+    }
+    $printers = Show-PrinterList
+    if ($printers.Count -eq 0) { return }
+    Write-Host '  0. Cancel / Annuler'
+    $choice = ((Read-Host 'Printer number to rename / Numero a renommer') | ForEach-Object { "$_".Trim() })
+    if ([string]::IsNullOrWhiteSpace($choice) -or $choice -eq '0') {
+        Write-Host 'Rename cancelled. / Annule.' -ForegroundColor DarkYellow
+        return
+    }
+    if ($choice -notmatch '^\d+$' -or [int]$choice -lt 1 -or [int]$choice -gt $printers.Count) {
+        Write-Host 'Invalid printer selection.' -ForegroundColor Yellow
+        $script:failed.Add('Printer rename skipped: invalid selection')
+        return
+    }
+    $oldName = $printers[[int]$choice - 1].Name
+    $newName = ((Read-Host ("New name for '{0}' (blank to cancel)" -f $oldName)) | ForEach-Object { "$_".Trim() })
+    if ([string]::IsNullOrWhiteSpace($newName)) {
+        Write-Host 'Rename cancelled.' -ForegroundColor DarkYellow
+        return
+    }
+    if ($newName -ieq $oldName) {
+        Write-Host 'The new name is the same; no change needed.' -ForegroundColor DarkYellow
+        return
+    }
+    if ($null -ne (Get-Printer -Name $newName -ErrorAction SilentlyContinue)) {
+        Write-Host ("A printer named '{0}' already exists." -f $newName) -ForegroundColor Yellow
+        $script:failed.Add('Printer rename skipped: target name already exists')
+        return
+    }
+    try {
+        Rename-Printer -Name $oldName -NewName $newName -ErrorAction Stop
+        Write-Host ("Renamed printer '{0}' to '{1}'." -f $oldName, $newName) -ForegroundColor Green
+    } catch {
+        Write-Host ("Could not rename the printer: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        $script:failed.Add('Printer rename failed')
+    }
+}
+
+function Show-PrinterMenu {
+    param([Parameter(Mandatory = $true)]$Config)
+
+    if (-not (Get-Command Get-Printer -ErrorAction SilentlyContinue)) {
+        Write-Host 'Printer cmdlets (PrintManagement) are not available on this Windows edition.' -ForegroundColor Red
+        $script:failed.Add('Printer menu skipped: PrintManagement unavailable')
+        return
+    }
+    while ($true) {
+        Write-Host ''
+        Write-Host 'PRINTERS / IMPRIMANTES :' -ForegroundColor Cyan
+        Write-Host '  1. Install a printer (TCP/IP: manufacturer, IP, name)'
+        Write-Host '  2. List installed printers'
+        Write-Host '  3. Rename a printer'
+        Write-Host '  0. Back to main menu / Retour'
+        $sub = ((Read-Host 'Printer option') | ForEach-Object { "$_".Trim() })
+        if ($sub -match '^(?i:0|q|quit|exit|b|back)$' -or [string]::IsNullOrWhiteSpace($sub)) {
+            return
+        }
+        switch ($sub) {
+            '1' { Install-NetworkPrinter -Config $Config }
+            '2' { [void](Show-PrinterList); Read-Host 'Press Enter to continue / Entree pour continuer' | Out-Null }
+            '3' { Rename-ChosenPrinter }
+            default {
+                Write-Host 'Invalid printer option. Use 1, 2, 3, or 0.' -ForegroundColor Yellow
+            }
+        }
+    }
+}
+
 function Install-NetworkPrinter {
     param([Parameter(Mandatory = $true)]$Config)
 
@@ -875,7 +970,7 @@ try {
     Write-Host '  1. Enable built-in Administrator and set a new password (you will enter it)'
     Write-Host '  2. Rename the currently signed-in local user account'
     Write-Host '  3. Choose software to install from a numbered list'
-    Write-Host '  4. Install a printer (TCP/IP: manufacturer, IP, name)'
+    Write-Host '  4. Printers (install / list / rename)'
     Write-Host '  5. Run all options (1+2+3+4)'
     Write-Host '  0. Exit / Quitter'
     Write-Host ''
@@ -933,7 +1028,7 @@ try {
         }
     }
 
-    if ($actions -contains '4') { Install-NetworkPrinter -Config $config }
+    if ($actions -contains '4') { Show-PrinterMenu -Config $config }
 
     Write-Host ''
     Write-Host '--------------------------------------------------------' -ForegroundColor Cyan
