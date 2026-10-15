@@ -604,16 +604,36 @@ function Install-NetworkPrinter {
 
     # --- Import the driver, auto-detecting its real name (works in EN and FR Windows). ---
     $driversBefore = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
-    Write-Host ("Importing driver from {0} ..." -f $infPath) -ForegroundColor Cyan
-    & pnputil.exe /add-driver "$infPath" /install 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host ("pnputil failed (exit {0}). The INF may be wrong for this Windows (x86 vs x64)." -f $LASTEXITCODE) -ForegroundColor Red
-        $script:failed.Add('Printer install failed: pnputil import error')
-        return
+    $skipImport = $false
+    if ((-not [string]::IsNullOrWhiteSpace([string]$preset.DriverHint))) {
+        $alreadyThere = @($driversBefore | Where-Object { "$_" -ieq ([string]$preset.DriverHint) })
+        if ($alreadyThere.Count -ge 1) {
+            Write-Host ("Driver already installed, reusing: '{0}'" -f $alreadyThere[0]) -ForegroundColor Green
+            $driverName = $alreadyThere[0]
+            $skipImport = $true
+        }
     }
+    if (-not $skipImport) {
+    Write-Host ("Importing driver from {0} ..." -f $infPath) -ForegroundColor Cyan
+    $pnpOut = & pnputil.exe /add-driver "$infPath" /install 2>&1 | Out-String
+    $pnpExit = $LASTEXITCODE
+    $pnpOk = ($pnpExit -eq 0) -or ($pnpOut -match '(?i)successfully|already exists')
     $driversAfter = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
     $newDrivers = @($driversAfter | Where-Object { $_ -notin $driversBefore })
     $driverName = ''
+    if ((-not $pnpOk) -and ($newDrivers.Count -eq 0)) {
+        Write-Host $pnpOut -ForegroundColor DarkGray
+        Write-Host 'pnputil import did not register a driver, trying printui fallback...' -ForegroundColor Yellow
+        $fallbackName = [string]$preset.DriverHint
+        if (-not [string]::IsNullOrWhiteSpace($fallbackName)) {
+            $printuiOut = & rundll32.exe printui.dll,PrintUIEntry /ia /f "$infPath" /m "$fallbackName" 2>&1 | Out-String
+            $driversAfter = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+            $newDrivers = @($driversAfter | Where-Object { $_ -notin $driversBefore })
+            if (($newDrivers.Count -eq 0) -and ($driversAfter -inotcontains $fallbackName)) {
+                Write-Host $printuiOut -ForegroundColor DarkGray
+            }
+        }
+    }
     if ($newDrivers.Count -eq 1) {
         $driverName = $newDrivers[0]
     } elseif ($newDrivers.Count -gt 1) {
@@ -630,7 +650,9 @@ function Install-NetworkPrinter {
         if ($match.Count -ge 1) { $driverName = $match[0] }
     }
     if ([string]::IsNullOrWhiteSpace($driverName)) {
-        Write-Host 'Could not determine the imported driver name. Installed drivers:' -ForegroundColor Yellow
+        Write-Host 'pnputil output (for diagnosis):' -ForegroundColor Yellow
+        Write-Host $pnpOut -ForegroundColor DarkGray
+        Write-Host 'The driver package did not register on this Windows.' -ForegroundColor Red
         @($driversAfter | Select-Object -Last 10) | ForEach-Object { Write-Host (" - {0}" -f $_) }
         $driverName = ((Read-Host 'Type the exact driver name to use') | ForEach-Object { "$_".Trim() })
     }
@@ -640,6 +662,7 @@ function Install-NetworkPrinter {
         return
     }
     Write-Host ("Driver ready: '{0}'" -f $driverName) -ForegroundColor Green
+    } # end if (-not $skipImport)
 
     # --- TCP/IP port + printer on this local PC. ---
     $ipAddress = ((Read-Host 'Printer IP address or hostname / Adresse IP ou nom') | ForEach-Object { "$_".Trim() })

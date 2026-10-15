@@ -293,7 +293,7 @@ Driver presets live in the `PrinterDrivers` array in `Software.json`:
 | Nothing happens after double-click | Right-click `Run-Setup.bat` → **Run as administrator**, and approve UAC. Check `Logs\setup-*.log`. |
 | `Failed when opening sources` / exit `1978335217` | Corrupt Winget source DB (the script now auto-resets once). Manual fix: `winget source reset --force`, then `winget source update`, then rerun. Update App Installer: https://aka.ms/getwinget. If logged in as built-in Administrator, try a regular admin account instead. |
 | Installer hash mismatch (can't override as admin) | Stale Winget manifest. The script now falls back to the vendor's direct download when `FallbackUrl` is set (Chrome included). Or wait a day and rerun after `winget source update`. |
-| Printer: `pnputil failed` | Wrong driver package for this Windows (x86 vs x64) or a corrupt INF. Re-download the vendor's 64-bit driver. |
+| Printer: driver did not register | `pnputil` "already exists" results are accepted automatically; a real failure prints its output. Check the INF matches this Windows (x64 `NTamd64`), or let the `printui` fallback run. |
 | Printer: no driver presets | Enable entries in `PrinterDrivers` in `Software.json`, or type an `.inf` path when asked. |
 | New username doesn't show | Sign out and back in, or restart. |
 
