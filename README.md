@@ -99,9 +99,9 @@ Want your own memorable word? Paste the full URL into https://tinyurl.com and cr
 
 </details>
 
-This downloads the latest version, extracts it to your temp folder, and starts the setup. Approve the UAC prompt when it appears.
+This downloads 2 small files (`Install-MyPC.ps1` + `Software.json`, ~60 KB) to a staging folder and starts the setup. Approve the UAC prompt when it appears.
 
-> Note: `OfficeSetup.exe` and other local installers are not in the repo, so those menu items show `FILE NOT FOUND` in online mode unless you copy the files in manually afterwards. Winget apps work normally.
+> Note: local-only files are not downloaded: `OfficeSetup.exe`, `Installers/` content and `Drivers/` printer folders (the ~100 MB repo ZIP is skipped on purpose for speed). Those menu items show `FILE NOT FOUND` unless they carry a `Url` (downloaded on demand, e.g. French Office, Chrome fallback) or you copy the files in manually afterwards. Winget apps work normally.
 
 Example session:
 

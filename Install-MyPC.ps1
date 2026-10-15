@@ -34,6 +34,10 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 
 try { Start-Transcript -Path $logFile -Append | Out-Null } catch {}
 
+# The built-in progress bar makes PS 5.1 file downloads ~10x slower
+# (matters for 100+ MB installers like Chrome). Hide it globally.
+$ProgressPreference = 'SilentlyContinue'
+
 $script:failed = [System.Collections.Generic.List[string]]::new()
 $script:winget = Get-Command winget.exe -ErrorAction SilentlyContinue
 $script:wingetSourceChecked = $false
