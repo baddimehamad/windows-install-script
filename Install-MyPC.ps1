@@ -576,6 +576,292 @@ function Rename-ChosenPrinter {
     }
 }
 
+function Get-UserGroupNames {
+    param([Parameter(Mandatory = $true)]$User)
+    $groups = @()
+    try {
+        foreach ($g in @(Get-LocalGroup -ErrorAction Stop)) {
+            try {
+                $hit = @(Get-LocalGroupMember -Group $g.Name -ErrorAction Stop | Where-Object { $null -ne $_.SID -and ($_.SID.Value -eq $User.SID.Value) })
+                if ($hit.Count -gt 0) { $groups += $g.Name }
+            } catch {}
+        }
+    } catch {}
+    return $groups
+}
+
+function Show-LocalUserList {
+    try {
+        $users = @(Get-LocalUser -ErrorAction Stop | Sort-Object Name)
+    } catch {
+        Write-Host ("Could not list local users: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        return @()
+    }
+    if ($users.Count -eq 0) {
+        Write-Host 'No local users found. / Aucun utilisateur local.' -ForegroundColor Yellow
+        return @()
+    }
+    Write-Host ''
+    Write-Host 'LOCAL USERS / UTILISATEURS LOCAUX :' -ForegroundColor Cyan
+    foreach ($u in $users) {
+        $state = if ($u.Enabled) { 'Enabled/Active' } else { 'Disabled/Desactive' }
+        $groups = Get-UserGroupNames -User $u
+        $memberOf = if ($groups.Count -gt 0) { $groups -join ', ' } else { '(no groups)' }
+        Write-Host (" {0,2}. {1} [{2}]" -f (@($users).IndexOf($u) + 1), $u.Name, $state)
+        Write-Host ("     Member of / Membre de : {0}" -f $memberOf) -ForegroundColor DarkGray
+    }
+    return $users
+}
+
+function Select-LocalUserByNumber {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Users,
+        [string]$Prompt = 'User number / Numero (0 = cancel)'
+    )
+    if ($Users.Count -eq 0) { return $null }
+    Write-Host '  0. Cancel / Annuler'
+    $choice = ((Read-Host $Prompt) | ForEach-Object { "$_".Trim() })
+    if ([string]::IsNullOrWhiteSpace($choice) -or $choice -eq '0') {
+        Write-Host 'Cancelled. / Annule.' -ForegroundColor DarkYellow
+        return $null
+    }
+    if ($choice -notmatch '^\d+$' -or [int]$choice -lt 1 -or [int]$choice -gt $Users.Count) {
+        Write-Host 'Invalid user selection.' -ForegroundColor Yellow
+        $script:failed.Add('User action skipped: invalid selection')
+        return $null
+    }
+    return $Users[[int]$choice - 1]
+}
+
+function Rename-ChosenLocalUser {
+    $users = Show-LocalUserList
+    if ($users.Count -eq 0) { return }
+    $account = Select-LocalUserByNumber -Users $users -Prompt 'User number to rename / Numero a renommer (0 = cancel)'
+    if ($null -eq $account) { return }
+    $newName = ((Read-Host ("New name for '{0}' (1-20 chars, blank to cancel)" -f $account.Name)) | ForEach-Object { "$_".Trim() })
+    if ([string]::IsNullOrWhiteSpace($newName)) {
+        Write-Host 'Rename cancelled.' -ForegroundColor DarkYellow
+        return
+    }
+    if ($newName.Length -gt 20) {
+        Write-Host 'The local account name must be 20 characters or fewer.' -ForegroundColor Yellow
+        $script:failed.Add('User rename skipped: name too long')
+        return
+    }
+    foreach ($character in '"/\[]:;|=,+*?<>'.ToCharArray()) {
+        if ($newName.Contains([string]$character)) {
+            Write-Host ('The account name contains an invalid character: {0}' -f $character) -ForegroundColor Yellow
+            $script:failed.Add('User rename skipped: invalid characters')
+            return
+        }
+    }
+    try {
+        $allLocalUsers = @(Get-LocalUser -ErrorAction Stop)
+    } catch {
+        Write-Host ("Could not list local users: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        return
+    }
+    $duplicate = $allLocalUsers | Where-Object { $_.Name -ieq $newName -and $_.SID.Value -ne $account.SID.Value } | Select-Object -First 1
+    if ($duplicate) {
+        Write-Host ("A local account named '{0}' already exists." -f $newName) -ForegroundColor Yellow
+        $script:failed.Add('User rename skipped: target name already exists')
+        return
+    }
+    if ($account.Name -ieq $newName) {
+        Write-Host 'The new name is the same as the current name; no change needed.' -ForegroundColor DarkYellow
+        return
+    }
+    try {
+        Rename-LocalUser -Name $account.Name -NewName $newName -ErrorAction Stop
+        try {
+            Set-LocalUser -Name $newName -FullName $newName -ErrorAction Stop
+        } catch {
+            Write-Host 'The account was renamed, but Windows did not accept the display-name update.' -ForegroundColor Yellow
+        }
+        Write-Host ("Renamed local account '{0}' to '{1}'. Sign out or restart to see the new name everywhere." -f $account.Name, $newName) -ForegroundColor Green
+        Write-Host 'The existing user profile folder was left unchanged.' -ForegroundColor Yellow
+    } catch {
+        Write-Host ("Could not rename the local account: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        $script:failed.Add('Local user account rename failed')
+    }
+}
+
+function Set-ChosenLocalUserPassword {
+    $users = Show-LocalUserList
+    if ($users.Count -eq 0) { return }
+    $account = Select-LocalUserByNumber -Users $users -Prompt 'User number for password change / Numero (0 = cancel)'
+    if ($null -eq $account) { return }
+    Write-Host 'Password input is hidden. Minimum 8 characters. / Saisie masquee. 8 caracteres minimum.' -ForegroundColor Yellow
+    $securePassword = Read-Host ("Enter new password for '{0}' (blank to cancel)" -f $account.Name) -AsSecureString
+    if ($null -eq $securePassword -or $securePassword.Length -eq 0) {
+        Write-Host 'Password change cancelled.' -ForegroundColor DarkYellow
+        return
+    }
+    $confirmPassword = Read-Host 'Confirm new password / Confirmez' -AsSecureString
+    if ($null -eq $confirmPassword -or $confirmPassword.Length -eq 0) {
+        Write-Host 'Password change cancelled (confirmation was empty).' -ForegroundColor DarkYellow
+        return
+    }
+    $plainFirst = [System.Net.NetworkCredential]::new('', $securePassword).Password
+    $plainConfirm = [System.Net.NetworkCredential]::new('', $confirmPassword).Password
+    try {
+        if ($plainFirst -cne $plainConfirm) {
+            Write-Host 'Passwords do not match. Nothing was changed. / Mots de passe differents.' -ForegroundColor Yellow
+            $script:failed.Add('User password change skipped: passwords did not match')
+            return
+        }
+        if ($plainFirst.Length -lt 8) {
+            Write-Host 'Password must be at least 8 characters. Nothing was changed. / 8 caracteres minimum.' -ForegroundColor Yellow
+            $script:failed.Add('User password change skipped: password too short')
+            return
+        }
+    } finally {
+        $plainFirst = $null
+        $plainConfirm = $null
+    }
+    try {
+        Set-LocalUser -Name $account.Name -Password $securePassword -ErrorAction Stop
+        Write-Host ("Password changed for '{0}'." -f $account.Name) -ForegroundColor Green
+    } catch {
+        Write-Host ("Could not change the password: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        Write-Host 'Windows password complexity policy may have rejected it.' -ForegroundColor Yellow
+        $script:failed.Add('Local user password change failed')
+    } finally {
+        if (Get-Variable -Name securePassword -Scope Local -ErrorAction SilentlyContinue) { $securePassword = $null }
+        if (Get-Variable -Name confirmPassword -Scope Local -ErrorAction SilentlyContinue) { $confirmPassword = $null }
+    }
+}
+
+function Edit-ChosenLocalUserGroups {
+    $users = Show-LocalUserList
+    if ($users.Count -eq 0) { return }
+    $account = Select-LocalUserByNumber -Users $users -Prompt 'User number for group change / Numero (0 = cancel)'
+    if ($null -eq $account) { return }
+    try {
+        $allGroups = @(Get-LocalGroup -ErrorAction Stop | Sort-Object Name)
+    } catch {
+        Write-Host ("Could not list local groups: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        return
+    }
+    $current = @(Get-UserGroupNames -User $account)
+    Write-Host ("'{0}' is a member of / est membre de : {1}" -f $account.Name, $(if ($current.Count -gt 0) { $current -join ', ' } else { '(no groups)' })) -ForegroundColor Cyan
+    $mode = ((Read-Host '[A]dd to a group / Ajouter, [R]emove from a group / Retirer (0 = cancel)') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    if ([string]::IsNullOrWhiteSpace($mode) -or $mode -in @('0', 'q', 'quit', 'exit')) {
+        Write-Host 'Group change cancelled.' -ForegroundColor DarkYellow
+        return
+    }
+    if ($mode -in @('a', 'add', 'ajouter')) {
+        Write-Host ''
+        Write-Host 'LOCAL GROUPS / GROUPES LOCAUX :' -ForegroundColor Cyan
+        for ($i = 0; $i -lt $allGroups.Count; $i++) {
+            $tag = if ($current -icontains $allGroups[$i].Name) { ' [already member]' } else { '' }
+            Write-Host (" {0,2}. {1}{2}" -f ($i + 1), $allGroups[$i].Name, $tag)
+        }
+        Write-Host '  0. Cancel / Annuler'
+        $gChoice = ((Read-Host 'Group number / Numero') | ForEach-Object { "$_".Trim() })
+        if ([string]::IsNullOrWhiteSpace($gChoice) -or $gChoice -eq '0') {
+            Write-Host 'Group change cancelled.' -ForegroundColor DarkYellow
+            return
+        }
+        if ($gChoice -notmatch '^\d+$' -or [int]$gChoice -lt 1 -or [int]$gChoice -gt $allGroups.Count) {
+            Write-Host 'Invalid group selection.' -ForegroundColor Yellow
+            $script:failed.Add('Group change skipped: invalid selection')
+            return
+        }
+        $group = $allGroups[[int]$gChoice - 1]
+        if ($current -icontains $group.Name) {
+            Write-Host ("'{0}' is already a member of '{1}'." -f $account.Name, $group.Name) -ForegroundColor DarkYellow
+            return
+        }
+        try {
+            Add-LocalGroupMember -Group $group.Name -Member $account.Name -ErrorAction Stop
+            Write-Host ("Added '{0}' to '{1}'." -f $account.Name, $group.Name) -ForegroundColor Green
+        } catch {
+            Write-Host ("Could not add to the group: {0}" -f $_.Exception.Message) -ForegroundColor Red
+            $script:failed.Add('Group membership change failed')
+        }
+    } elseif ($mode -in @('r', 'remove', 'retirer', 'retire')) {
+        if ($current.Count -eq 0) {
+            Write-Host ("'{0}' is not a member of any group." -f $account.Name) -ForegroundColor DarkYellow
+            return
+        }
+        Write-Host 'Current groups:' -ForegroundColor Cyan
+        for ($i = 0; $i -lt $current.Count; $i++) { Write-Host (" {0,2}. {1}" -f ($i + 1), $current[$i]) }
+        Write-Host '  0. Cancel / Annuler'
+        $gChoice = ((Read-Host 'Group number to remove from / Numero') | ForEach-Object { "$_".Trim() })
+        if ([string]::IsNullOrWhiteSpace($gChoice) -or $gChoice -eq '0') {
+            Write-Host 'Group change cancelled.' -ForegroundColor DarkYellow
+            return
+        }
+        if ($gChoice -notmatch '^\d+$' -or [int]$gChoice -lt 1 -or [int]$gChoice -gt $current.Count) {
+            Write-Host 'Invalid group selection.' -ForegroundColor Yellow
+            $script:failed.Add('Group change skipped: invalid selection')
+            return
+        }
+        $groupName = $current[[int]$gChoice - 1]
+        try {
+            $groupObj = Get-LocalGroup -Name $groupName -ErrorAction Stop
+        } catch {
+            $groupObj = $null
+        }
+        if ($null -ne $groupObj -and $groupObj.SID.Value -match '-544$') {
+            # Built-in Administrators group: never strand the PC with no admin.
+            $otherAdmins = @(Get-LocalGroupMember -Group $groupObj.Name -ErrorAction SilentlyContinue | Where-Object {
+                $_.ObjectClass -eq 'User' -and ($_.SID.Value -ne $account.SID.Value) -and
+                (($tmpUser = Get-LocalUser -SID $_.SID -ErrorAction SilentlyContinue) -and $tmpUser.Enabled)
+            })
+            if ($otherAdmins.Count -eq 0) {
+                Write-Host ("WARNING: '{0}' looks like the last enabled administrator." -f $account.Name) -ForegroundColor Red
+                Write-Host 'Removing it would leave this PC with no admin account.' -ForegroundColor Red
+                $confirmLast = ((Read-Host 'Type YES/OUI to remove anyway, anything else cancels') | ForEach-Object { "$_".Trim() })
+                if ($confirmLast -notin @('YES', 'Y', 'OUI', 'O')) {
+                    Write-Host 'Removal cancelled. Admin account kept.' -ForegroundColor DarkYellow
+                    return
+                }
+            }
+        }
+        try {
+            Remove-LocalGroupMember -Group $groupName -Member $account.Name -ErrorAction Stop
+            Write-Host ("Removed '{0}' from '{1}'." -f $account.Name, $groupName) -ForegroundColor Green
+        } catch {
+            Write-Host ("Could not remove from the group: {0}" -f $_.Exception.Message) -ForegroundColor Red
+            $script:failed.Add('Group membership change failed')
+        }
+    } else {
+        Write-Host 'Type A to add or R to remove. Nothing was changed.' -ForegroundColor Yellow
+    }
+}
+
+function Show-UserMenu {
+    if (-not (Get-Command Get-LocalUser -ErrorAction SilentlyContinue)) {
+        Write-Host 'Local user cmdlets are not available on this Windows edition.' -ForegroundColor Red
+        $script:failed.Add('Users menu skipped: LocalUser cmdlets unavailable')
+        return
+    }
+    while ($true) {
+        Write-Host ''
+        Write-Host 'USERS / UTILISATEURS :' -ForegroundColor Cyan
+        Write-Host '  1. List local users (details + member of)'
+        Write-Host '  2. Rename a user'
+        Write-Host "  3. Change a user's password"
+        Write-Host "  4. Change a user's groups (member of)"
+        Write-Host '  0. Back to main menu / Retour'
+        $sub = ((Read-Host 'Users option') | ForEach-Object { "$_".Trim() })
+        if ($sub -match '^(?i:0|q|quit|exit|b|back)$' -or [string]::IsNullOrWhiteSpace($sub)) {
+            return
+        }
+        switch ($sub) {
+            '1' { [void](Show-LocalUserList); Read-Host 'Press Enter to continue / Entree pour continuer' | Out-Null }
+            '2' { Rename-ChosenLocalUser }
+            '3' { Set-ChosenLocalUserPassword }
+            '4' { Edit-ChosenLocalUserGroups }
+            default {
+                Write-Host 'Invalid users option. Use 1, 2, 3, 4, or 0.' -ForegroundColor Yellow
+            }
+        }
+    }
+}
+
 function Show-PrinterMenu {
     param([Parameter(Mandatory = $true)]$Config)
 
@@ -975,7 +1261,8 @@ try {
     Write-Host '  2. Rename the currently signed-in local user account'
     Write-Host '  3. Choose software to install from a numbered list'
     Write-Host '  4. Printers (install / list / rename)'
-    Write-Host '  5. Run all options (1+2+3+4)'
+    Write-Host '  5. Users (list / rename / password / groups)'
+    Write-Host '  6. Run all options (1+2+3+4+5)'
     Write-Host '  0. Exit / Quitter'
     Write-Host ''
     Write-Host 'You can choose more than one option, for example: 1,3'
@@ -989,14 +1276,14 @@ try {
         continue
     }
 
-    if ($mainChoice -eq '5') {
-        $actions = @('1', '2', '3', '4')
+    if ($mainChoice -eq '6') {
+        $actions = @('1', '2', '3', '4', '5')
     } else {
         $actions = @($mainChoice -split '[,;\s]+' | Select-Object -Unique)
-        $validActions = @('1', '2', '3', '4')
+        $validActions = @('1', '2', '3', '4', '5')
         $invalidActions = @($actions | Where-Object { $_ -notin $validActions })
         if ($invalidActions.Count -gt 0) {
-            Write-Host 'Invalid main-menu selection. Use 1, 2, 3, 4, 5, or 0. Example: 1,3' -ForegroundColor Yellow
+            Write-Host 'Invalid main-menu selection. Use 1, 2, 3, 4, 5, 6, or 0. Example: 1,3' -ForegroundColor Yellow
             Read-Host 'Press Enter for main menu / Entree = menu principal'
             continue
         }
@@ -1033,6 +1320,7 @@ try {
     }
 
     if ($actions -contains '4') { Show-PrinterMenu -Config $config }
+    if ($actions -contains '5') { Show-UserMenu }
 
     Write-Host ''
     Write-Host '--------------------------------------------------------' -ForegroundColor Cyan

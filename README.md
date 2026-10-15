@@ -29,7 +29,8 @@ When you run the tool you get a main menu with 4 actions:
 | 2 | **Rename current local user** | Renames the local account you were signed in with (name + display name). Does **not** rename `C:\Users\OldName`. |
 | 3 | **Install software** | Shows a numbered list from `Software.json`. Install only what you pick, e.g. `1,3,5`, or `A` for all, `0` to skip. |
 | 4 | **Printers** | Submenu: install a printer (pick manufacturer, then IP/hostname, port, name), list installed printers (driver, port, status, default), or rename any printer. |
-| 5 | **Run all** | Runs 1 + 2 + 3 + 4 in order. |
+| 5 | **Users** | Submenu: list local users (with member-of groups), rename any user, change any user's password, or change group membership (add/remove, e.g. Administrators). Removing the last enabled admin needs `YES`/`OUI` confirmation. |
+| 6 | **Run all** | Runs 1 + 2 + 3 + 4 + 5 in order. |
 | 0 | **Exit** | Exit without further changes. |
 
 After each step finishes you return to this menu: press **Enter** for home, or `0` to exit.
@@ -77,7 +78,7 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
      ```
 2. **(Optional) Add Office:** copy your `OfficeSetup.exe` next to `Install-MyPC.ps1` (same folder as `Run-Setup.bat`).
 3. **Run:** double-click **`Run-Setup.bat`** → approve the UAC prompt.
-4. **Choose:** enter e.g. `5` to run everything, or `1,3` for Administrator + software only.
+4. **Choose:** enter e.g. `6` to run everything, or `1,3` for Administrator + software only.
    - If you chose option 1, type `YES`/`OUI` (any case: yes, Yes, oui...) to confirm, then enter a new password when asked (minimum 8 characters), then confirm it. Leave blank to cancel.
 5. **Pick software:** enter numbers like `1,3,5`, or `A` for all, or `0` to skip.
 6. **Done:** check the summary at the end. If anything failed, open the `Logs` folder.
@@ -114,7 +115,8 @@ Choose what you want to do:
   2. Rename the currently signed-in local user account
   3. Choose software to install from a numbered list
   4. Printers (install / list / rename)
-  5. Run all options (1+2+3+4)
+  5. Users (list / rename / password / groups)
+  6. Run all options (1+2+3+4+5)
   0. Exit
 
 Enter option number(s): 1,3
@@ -267,6 +269,12 @@ Driver presets live in the `PrinterDrivers` array in `Software.json`:
 - The driver is imported with `pnputil`, and its real name is auto-detected (works on French and English Windows). `DriverHint` is only a fallback.
 - Set `"Enabled": false` to hide a manufacturer without deleting it.
 
+### Manage local users (option 5)
+
+Option 5 opens a submenu: **1 = list** all local users (enabled state + member-of groups), **2 = rename** any user (same 20-char/character rules, profile folder untouched), **3 = change password** (hidden input, min 8 chars, must confirm), **4 = groups** (pick a user, then add to or remove from any local group — groups are listed by their real localized names, e.g. `Administrateurs` on French Windows).
+
+Safety: removing the last enabled administrator requires typing `YES`/`OUI`, so the PC is never left without an admin.
+
 ---
 
 ## 🔒 Important security notes
@@ -297,6 +305,7 @@ Driver presets live in the `PrinterDrivers` array in `Software.json`:
 | Installer hash mismatch (can't override as admin) | Stale Winget manifest. The script now falls back to the vendor's direct download when `FallbackUrl` is set (Chrome included). Or wait a day and rerun after `winget source update`. |
 | Printer: driver did not register | `pnputil` "already exists" results are accepted automatically; a real failure prints its output. Check the INF matches this Windows (x64 `NTamd64`), or let the `printui` fallback run. |
 | Printer: no driver presets | Enable entries in `PrinterDrivers` in `Software.json`, or type an `.inf` path when asked. |
+| Password change rejected | Windows complexity policy may have refused it (or the account is not local). Try a longer password with mixed case, digits and symbols. |
 | New username doesn't show | Sign out and back in, or restart. |
 
 Logs are in `Logs\setup-YYYYMMDD-HHMMSS.log` (transcript of the whole run).
