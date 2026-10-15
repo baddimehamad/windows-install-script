@@ -1,0 +1,6 @@
+# Driver packages must stay byte-identical: their .cat catalogs contain hashes
+# of the exact vendor bytes. CRLF normalization would invalidate them, so
+# everything under Drivers/ is stored as binary (no line-ending conversion).
+Drivers/** binary
+*.cat binary
+*.cab binary

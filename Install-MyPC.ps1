@@ -639,7 +639,9 @@ function Install-NetworkPrinter {
             }
             Write-Host ("Registering V4 driver via Add-PrinterDriver: '{0}' ..." -f $fallbackName) -ForegroundColor Yellow
             try {
-                Add-PrinterDriver -Name $fallbackName -InfPath $infPath -ErrorAction Stop
+                # NOTE: Add-PrinterDriver has no -InfPath parameter; -Name alone
+                # registers a driver package already staged by pnputil.
+                Add-PrinterDriver -Name $fallbackName -ErrorAction Stop
                 Write-Host ("Add-PrinterDriver succeeded for '{0}'." -f $fallbackName) -ForegroundColor Green
             } catch {
                 Write-Host ("Add-PrinterDriver failed: {0}" -f $_.Exception.Message) -ForegroundColor DarkGray
@@ -687,7 +689,17 @@ function Install-NetworkPrinter {
         Write-Host 'The driver package did not register on this Windows.' -ForegroundColor Red
         Write-Host 'Tip: You may need to download a newer driver from the manufacturer website.' -ForegroundColor Yellow
         @($driversAfter | Select-Object -Last 10) | ForEach-Object { Write-Host (" - {0}" -f $_) }
-        $driverName = ((Read-Host 'Type the exact driver name to use') | ForEach-Object { "$_".Trim() })
+        while ([string]::IsNullOrWhiteSpace($driverName)) {
+            $typedName = ((Read-Host 'Type the exact driver name from the list above (blank to cancel)') | ForEach-Object { "$_".Trim() })
+            if ([string]::IsNullOrWhiteSpace($typedName)) { break }
+            $nameMatch = @($driversAfter | Where-Object { "$_" -ieq $typedName })
+            if ($nameMatch.Count -ge 1) {
+                $driverName = $nameMatch[0]
+            } else {
+                Write-Host ("No installed driver named '{0}'. Pick one from the list." -f $typedName) -ForegroundColor Yellow
+                $driversAfter = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+            }
+        }
     }
     if ([string]::IsNullOrWhiteSpace($driverName)) {
         Write-Host 'Printer install cancelled (no driver selected).' -ForegroundColor DarkYellow
