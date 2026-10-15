@@ -29,7 +29,7 @@ When you run the tool you get a main menu with 4 actions:
 | 2 | **Rename current local user** | Renames the local account you were signed in with (name + display name). Does **not** rename `C:\Users\OldName`. |
 | 3 | **Install software** | Shows a numbered list from `Software.json`. Install only what you pick, e.g. `1,3,5`, or `A` for all, `0` to skip. |
 | 4 | **Printers** | Submenu: install a printer (pick manufacturer, then IP/hostname, port, name), list installed printers (driver, port, status, default), or rename any printer. |
-| 5 | **Users** | Submenu: list local users (with member-of groups), rename any user, change any user's password, or change group membership (add/remove, e.g. Administrators). Removing the last enabled admin needs `YES`/`OUI` confirmation. |
+| 5 | **Users** | Submenu: list local users (with member-of groups), rename any user, change any user's password, or change group membership (add/remove, e.g. Administrators). The only enabled administrator is fully locked: its group membership cannot be changed at all. |
 | 6 | **Run all** | Runs 1 + 2 + 3 + 4 + 5 in order. |
 | 0 | **Exit** | Exit without further changes. |
 
@@ -273,7 +273,7 @@ Driver presets live in the `PrinterDrivers` array in `Software.json`:
 
 Option 5 opens a submenu: **1 = list** all local users (enabled state + member-of groups), **2 = rename** any user (same 20-char/character rules, profile folder untouched), **3 = change password** (hidden input, min 8 chars, must confirm), **4 = groups** (pick a user, then add to or remove from any local group — groups are listed by their real localized names, e.g. `Administrateurs` on French Windows).
 
-Safety: removing the last enabled administrator requires typing `YES`/`OUI`, so the PC is never left without an admin.
+Safety: if only one enabled administrator is left on the PC, its group membership is completely frozen — the script refuses any change to it (no override). Create or enable another admin first.
 
 ---
 

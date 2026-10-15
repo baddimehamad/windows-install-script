@@ -737,6 +737,24 @@ function Edit-ChosenLocalUserGroups {
     if ($users.Count -eq 0) { return }
     $account = Select-LocalUserByNumber -Users $users -Prompt 'User number for group change / Numero (0 = cancel)'
     if ($null -eq $account) { return }
+    # Freeze group membership for the sole remaining enabled administrator:
+    # with only one active admin, any permission change is refused outright.
+    try {
+        $adminGroupObj = @(Get-LocalGroup -ErrorAction Stop | Where-Object { $_.SID.Value -match '-544$' } | Select-Object -First 1)
+        if ($adminGroupObj.Count -ge 1) {
+            $enabledAdmins = @(Get-LocalGroupMember -Group $adminGroupObj[0].Name -ErrorAction SilentlyContinue | Where-Object {
+                $_.ObjectClass -eq 'User' -and
+                (($tmpUser = Get-LocalUser -SID $_.SID -ErrorAction SilentlyContinue) -and $tmpUser.Enabled)
+            })
+            if (($enabledAdmins.Count -eq 1) -and ($enabledAdmins[0].SID.Value -eq $account.SID.Value)) {
+                Write-Host ("LOCKED: '{0}' is the only enabled administrator on this PC." -f $account.Name) -ForegroundColor Red
+                Write-Host 'Group membership is frozen for this account. Create or enable another admin first.' -ForegroundColor Red
+                Write-Host 'Verrouille : dernier administrateur actif. Adhésions bloquées.' -ForegroundColor Red
+                $script:failed.Add('Group change blocked: last enabled administrator is protected')
+                return
+            }
+        }
+    } catch {}
     try {
         $allGroups = @(Get-LocalGroup -ErrorAction Stop | Sort-Object Name)
     } catch {
@@ -799,27 +817,6 @@ function Edit-ChosenLocalUserGroups {
             return
         }
         $groupName = $current[[int]$gChoice - 1]
-        try {
-            $groupObj = Get-LocalGroup -Name $groupName -ErrorAction Stop
-        } catch {
-            $groupObj = $null
-        }
-        if ($null -ne $groupObj -and $groupObj.SID.Value -match '-544$') {
-            # Built-in Administrators group: never strand the PC with no admin.
-            $otherAdmins = @(Get-LocalGroupMember -Group $groupObj.Name -ErrorAction SilentlyContinue | Where-Object {
-                $_.ObjectClass -eq 'User' -and ($_.SID.Value -ne $account.SID.Value) -and
-                (($tmpUser = Get-LocalUser -SID $_.SID -ErrorAction SilentlyContinue) -and $tmpUser.Enabled)
-            })
-            if ($otherAdmins.Count -eq 0) {
-                Write-Host ("WARNING: '{0}' looks like the last enabled administrator." -f $account.Name) -ForegroundColor Red
-                Write-Host 'Removing it would leave this PC with no admin account.' -ForegroundColor Red
-                $confirmLast = ((Read-Host 'Type YES/OUI to remove anyway, anything else cancels') | ForEach-Object { "$_".Trim() })
-                if ($confirmLast -notin @('YES', 'Y', 'OUI', 'O')) {
-                    Write-Host 'Removal cancelled. Admin account kept.' -ForegroundColor DarkYellow
-                    return
-                }
-            }
-        }
         try {
             Remove-LocalGroupMember -Group $groupName -Member $account.Name -ErrorAction Stop
             Write-Host ("Removed '{0}' from '{1}'." -f $account.Name, $groupName) -ForegroundColor Green
