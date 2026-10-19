@@ -141,7 +141,7 @@ windows-install-script/
 ├── Software.json      ← edit this to add/remove apps
 ├── Installers/        ← optional folder for your own .exe / .msi files
 │   └── README.txt
-├── Drivers/           ← printer driver folders (e.g. Drivers\KonicaMinolta_UPD)
+├── Drivers/           ← printer driver folders (konika_minolta, xerox, epson)
 │   └── README.txt
 └── Logs/              ← created automatically, one log per run
 ```
@@ -251,19 +251,24 @@ Option 4 opens a submenu: **1 = install** a printer, **2 = list** installed prin
 
 Install asks: **manufacturer → printer IP/hostname → port (Enter = 9100) → printer name** (default: `<manufacturer> <IP>`). It creates a local TCP/IP port (`TCP_<IP>`) and installs the printer on this PC. List shows name, driver, port, status and the default printer. Rename lists printers by number and renames the one you pick.
 
-Driver presets live in the `PrinterDrivers` array in `Software.json`:
+Driver presets live in the `PrinterDrivers` array in `Software.json`. The current list is:
+
+1. Konica Minolta (Universal V4 PCL)
+2. Xerox (Global Print Driver PCL6)
+3. Epson (Universal Print Driver)
 
 ```json
 {
-  "Make": "Konica Minolta (Universal PCL6)",
-  "DriverHint": "KONICA MINOLTA Universal PCL6",
-  "Path": "Drivers\\KonicaMinolta_UPD",
+  "Make": "Konica Minolta (Universal V4 PCL)",
+  "DriverHint": "KONICA MINOLTA Universal V4 PCL",
+  "Path": "Drivers\\konika_minolta",
   "Url": "",
   "Enabled": true
 }
 ```
 
 - `Path` is a folder holding the extracted driver (`.inf` + `.cat` + `.dll`). If the folder is missing (typical in online mode), the script downloads it from the repository into `C:\ProgramData\Windows_Auto_Setup_Online\Drivers\<folder>` automatically, verifies every file size, and reuses it on later runs. If the driver is already installed, no download is needed at all.
+- Packages with architecture subfolders are supported (Epson stores files in `WINX64\SETUP\...`); on a 64-bit PC the x86 and ARM64 copies are skipped to save download size.
 - Or set `Url` to a direct driver ZIP link and the script downloads + extracts it.
 - Or type an `.inf` path directly when asked.
 - The driver is imported with `pnputil`, and its real name is auto-detected (works on French and English Windows). `DriverHint` is only a fallback.
