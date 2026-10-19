@@ -930,45 +930,61 @@ function Save-DriverFolderFromGitHub {
     $branch = 'main'
     $headers = @{ 'User-Agent' = 'Windows-Auto-Setup' }
     try {
-        # Invoke-RestMethod emits a JSON array as a single object; do not wrap
-        # the call in @() or the array ends up nested and Where-Object sees one item.
-        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/contents/${RepoPath}?ref=$branch" -Headers $headers -ErrorAction Stop
-        $entries = @($response)
+        # One recursive tree call lists the whole repo (including subfolders).
+        # Per-folder listing would need dozens of API calls for packages such
+        # as Epson, which keeps files under WINX64\SETUP\... and blobs the
+        # unauthenticated 60-requests/hour limit.
+        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/git/trees/${branch}?recursive=1" -Headers $headers -ErrorAction Stop
     } catch {
         $status = $null
         try { $status = [int]$_.Exception.Response.StatusCode } catch {}
-        if ($status -eq 404) {
-            Write-Host ("No driver package for '{0}' is stored in the repository." -f $RepoPath) -ForegroundColor Yellow
+        if ($status -eq 403) {
+            Write-Host 'GitHub API rate limit reached while listing driver files.' -ForegroundColor Red
+            Write-Host 'Wait a few minutes and retry, or enter the .inf path manually.' -ForegroundColor Yellow
         } else {
             Write-Host ("Could not list driver files on GitHub: {0}" -f $_.Exception.Message) -ForegroundColor Red
         }
         return $false
     }
-    $files = @($entries | Where-Object { $_.type -eq 'file' -and $_.download_url })
-    if ($files.Count -eq 0) {
-        Write-Host ("No driver files found in the repository folder '{0}'." -f $RepoPath) -ForegroundColor Red
+    $tree = @($response.tree)
+    $prefix = $RepoPath.Trim('/') + '/'
+    $entries = @($tree | Where-Object { $_.type -eq 'blob' -and $_.path.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) })
+    if ($entries.Count -eq 0) {
+        Write-Host ("No driver package for '{0}' is stored in the repository." -f $RepoPath) -ForegroundColor Yellow
         return $false
     }
+    # Packages like Epson ship the same driver for x86/amd64/arm64. On an x64
+    # PC only the common files + WINX64 are needed; skip the other arch trees.
+    $hasWinX64 = @($entries | Where-Object { $_.path -match '(?i)/WINX64/' }).Count -gt 0
+    if ($hasWinX64 -and $env:PROCESSOR_ARCHITECTURE -eq 'AMD64') {
+        $entries = @($entries | Where-Object { $_.path -notmatch '(?i)/WINX86/' -and $_.path -notmatch '(?i)/ARM64/' })
+    }
+    $totalBytes = (($entries | Measure-Object -Property size -Sum).Sum)
     New-Item -ItemType Directory -Path $Destination -Force -ErrorAction Stop | Out-Null
     if (-not (Test-Path -LiteralPath (Join-Path $Destination '.complete') -PathType Leaf)) {
         # An unmarked folder is a failed/partial download: start clean so a
         # stale INF cannot be mistaken for a complete driver package.
-        Get-ChildItem -LiteralPath $Destination -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -LiteralPath $Destination -File -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
     }
-    Write-Host ("Downloading {0} driver files ({1:N1} MB) from GitHub ..." -f $files.Count, ((($files | Measure-Object -Property size -Sum).Sum) / 1MB)) -ForegroundColor Cyan
-    foreach ($file in $files) {
-        $destFile = Join-Path $Destination $file.name
+    Write-Host ("Downloading {0} driver files ({1:N1} MB) from GitHub ..." -f $entries.Count, ($totalBytes / 1MB)) -ForegroundColor Cyan
+    foreach ($file in $entries) {
+        $relative = $file.path.Substring($prefix.Length) -replace '/', '\'
+        $destFile = Join-Path $Destination $relative
+        $parent = Split-Path -Parent $destFile
+        if (-not [string]::IsNullOrWhiteSpace($parent)) { New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null }
         $expected = [int64]$file.size
         if ((Test-Path -LiteralPath $destFile -PathType Leaf) -and ((Get-Item -LiteralPath $destFile).Length -eq $expected)) { continue }
         try {
-            $dlParams = @{ Uri = $file.download_url; OutFile = $destFile; ErrorAction = 'Stop' }
+            $encodedPath = (($file.path -split '/') | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
+            $url = "https://raw.githubusercontent.com/$repo/$branch/$encodedPath"
+            $dlParams = @{ Uri = $url; OutFile = $destFile; ErrorAction = 'Stop' }
             if ($PSVersionTable.PSVersion.Major -le 5) { $dlParams['UseBasicParsing'] = $true }
             Invoke-WebRequest @dlParams
             if (-not (Test-Path -LiteralPath $destFile -PathType Leaf)) { throw 'file was not created' }
             if ((Get-Item -LiteralPath $destFile).Length -ne $expected) { throw 'size mismatch' }
         } catch {
             Remove-Item -LiteralPath (Join-Path $Destination '.complete') -Force -ErrorAction SilentlyContinue
-            Write-Host ("Download failed for {0}: {1}" -f $file.name, $_.Exception.Message) -ForegroundColor Red
+            Write-Host ("Download failed for {0}: {1}" -f $file.path, $_.Exception.Message) -ForegroundColor Red
             return $false
         }
     }
