@@ -889,6 +889,94 @@ function Show-PrinterMenu {
     }
 }
 
+function Get-DriverCacheRoot {
+    # Persistent cache outside the online staging folder (which is wiped on
+    # every run), so a downloaded driver package is reused next time.
+    $base = $env:ProgramData
+    if ([string]::IsNullOrWhiteSpace($base)) { $base = [System.IO.Path]::GetTempPath() }
+    $cache = Join-Path $base 'Windows_Auto_Setup_Online\Drivers'
+    try {
+        New-Item -ItemType Directory -Path $cache -Force -ErrorAction Stop | Out-Null
+        return $cache
+    } catch {
+        $fallback = Join-Path ([System.IO.Path]::GetTempPath()) 'Windows_Auto_Setup_Online\Drivers'
+        New-Item -ItemType Directory -Path $fallback -Force -ErrorAction Stop | Out-Null
+        return $fallback
+    }
+}
+
+function Resolve-DriverInfPath {
+    param([string]$Folder)
+    if ([string]::IsNullOrWhiteSpace($Folder) -or -not (Test-Path -LiteralPath $Folder -PathType Container)) { return '' }
+    $infs = @(Get-ChildItem -LiteralPath $Folder -Filter '*.inf' -File -ErrorAction SilentlyContinue)
+    if ($infs.Count -eq 1) { return $infs[0].FullName }
+    if ($infs.Count -gt 1) {
+        Write-Host 'Several INF files found, pick one:' -ForegroundColor Cyan
+        for ($i = 0; $i -lt $infs.Count; $i++) { Write-Host (" {0,2}. {1}" -f ($i + 1), $infs[$i].Name) }
+        $choice = ((Read-Host 'INF number') | ForEach-Object { "$_".Trim() })
+        if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $infs.Count) {
+            return $infs[[int]$choice - 1].FullName
+        }
+    }
+    return ''
+}
+
+function Save-DriverFolderFromGitHub {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoPath,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+    $repo = 'baddimehamad/windows-install-script'
+    $branch = 'main'
+    $headers = @{ 'User-Agent' = 'Windows-Auto-Setup' }
+    try {
+        # Invoke-RestMethod emits a JSON array as a single object; do not wrap
+        # the call in @() or the array ends up nested and Where-Object sees one item.
+        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/contents/${RepoPath}?ref=$branch" -Headers $headers -ErrorAction Stop
+        $entries = @($response)
+    } catch {
+        $status = $null
+        try { $status = [int]$_.Exception.Response.StatusCode } catch {}
+        if ($status -eq 404) {
+            Write-Host ("No driver package for '{0}' is stored in the repository." -f $RepoPath) -ForegroundColor Yellow
+        } else {
+            Write-Host ("Could not list driver files on GitHub: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        }
+        return $false
+    }
+    $files = @($entries | Where-Object { $_.type -eq 'file' -and $_.download_url })
+    if ($files.Count -eq 0) {
+        Write-Host ("No driver files found in the repository folder '{0}'." -f $RepoPath) -ForegroundColor Red
+        return $false
+    }
+    New-Item -ItemType Directory -Path $Destination -Force -ErrorAction Stop | Out-Null
+    if (-not (Test-Path -LiteralPath (Join-Path $Destination '.complete') -PathType Leaf)) {
+        # An unmarked folder is a failed/partial download: start clean so a
+        # stale INF cannot be mistaken for a complete driver package.
+        Get-ChildItem -LiteralPath $Destination -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host ("Downloading {0} driver files ({1:N1} MB) from GitHub ..." -f $files.Count, ((($files | Measure-Object -Property size -Sum).Sum) / 1MB)) -ForegroundColor Cyan
+    foreach ($file in $files) {
+        $destFile = Join-Path $Destination $file.name
+        $expected = [int64]$file.size
+        if ((Test-Path -LiteralPath $destFile -PathType Leaf) -and ((Get-Item -LiteralPath $destFile).Length -eq $expected)) { continue }
+        try {
+            $dlParams = @{ Uri = $file.download_url; OutFile = $destFile; ErrorAction = 'Stop' }
+            if ($PSVersionTable.PSVersion.Major -le 5) { $dlParams['UseBasicParsing'] = $true }
+            Invoke-WebRequest @dlParams
+            if (-not (Test-Path -LiteralPath $destFile -PathType Leaf)) { throw 'file was not created' }
+            if ((Get-Item -LiteralPath $destFile).Length -ne $expected) { throw 'size mismatch' }
+        } catch {
+            Remove-Item -LiteralPath (Join-Path $Destination '.complete') -Force -ErrorAction SilentlyContinue
+            Write-Host ("Download failed for {0}: {1}" -f $file.name, $_.Exception.Message) -ForegroundColor Red
+            return $false
+        }
+    }
+    # Only a fully verified folder is marked complete and trusted as a cache.
+    Set-Content -LiteralPath (Join-Path $Destination '.complete') -Value 'ok' -Encoding ASCII
+    return $true
+}
+
 function Install-NetworkPrinter {
     param([Parameter(Mandatory = $true)]$Config)
 
@@ -924,78 +1012,115 @@ function Install-NetworkPrinter {
     $preset = $presets[[int]$makeChoice - 1]
     Write-Host ("Selected: {0}" -f $preset.Make) -ForegroundColor Green
 
-    # --- Driver files: local folder/INF, or download via Url, or ask for a path. ---
-    $driverDir = ''
-    $presetPath = [string]$preset.Path
-    if (-not [string]::IsNullOrWhiteSpace($presetPath)) {
-        if ([System.IO.Path]::IsPathRooted($presetPath)) { $driverDir = $presetPath }
-        else { $driverDir = Join-Path $script:scriptRoot $presetPath }
-    }
-    $presetUrl = ''
-    if ($null -ne $preset.Url) { $presetUrl = ([string]$preset.Url).Trim() }
-    $infPath = ''
-    if ((-not [string]::IsNullOrWhiteSpace($driverDir)) -and (Test-Path -LiteralPath $driverDir)) {
-        if ((Test-Path -LiteralPath $driverDir -PathType Leaf) -and $driverDir.ToLowerInvariant().EndsWith('.inf')) {
-            $infPath = $driverDir
-        } else {
-            $infs = @(Get-ChildItem -LiteralPath $driverDir -Filter '*.inf' -File -ErrorAction SilentlyContinue)
-            if ($infs.Count -eq 1) { $infPath = $infs[0].FullName }
-            elseif ($infs.Count -gt 1) {
-                Write-Host 'Several INF files found, pick one:' -ForegroundColor Cyan
-                for ($i = 0; $i -lt $infs.Count; $i++) { Write-Host (" {0,2}. {1}" -f ($i + 1), $infs[$i].Name) }
-                $infChoice = ((Read-Host 'INF number') | ForEach-Object { "$_".Trim() })
-                if ($infChoice -match '^\d+$' -and [int]$infChoice -ge 1 -and [int]$infChoice -le $infs.Count) {
-                    $infPath = $infs[[int]$infChoice - 1].FullName
-                }
-            }
-        }
-    }
-    if ([string]::IsNullOrWhiteSpace($infPath) -and (-not [string]::IsNullOrWhiteSpace($presetUrl))) {
-        try {
-            if ([string]::IsNullOrWhiteSpace($driverDir)) { $driverDir = Join-Path $script:scriptRoot 'Drivers' }
-            New-Item -ItemType Directory -Path $driverDir -Force -ErrorAction Stop | Out-Null
-            $uri = [System.Uri]$presetUrl
-            $dlName = [System.IO.Path]::GetFileName($uri.LocalPath)
-            if ([string]::IsNullOrWhiteSpace($dlName)) { $dlName = 'driver_package.zip' }
-            $dlPath = Join-Path $driverDir $dlName
-            Write-Host ("Downloading driver from {0} ..." -f $presetUrl) -ForegroundColor Cyan
-            $dlParams = @{ Uri = $presetUrl; OutFile = $dlPath; ErrorAction = 'Stop' }
-            if ($PSVersionTable.PSVersion.Major -le 5) { $dlParams['UseBasicParsing'] = $true }
-            Invoke-WebRequest @dlParams
-            if ($dlPath.ToLowerInvariant().EndsWith('.zip')) {
-                Expand-Archive -LiteralPath $dlPath -DestinationPath $driverDir -Force -ErrorAction Stop
-            }
-            $infs = @(Get-ChildItem -LiteralPath $driverDir -Filter '*.inf' -File -Recurse -ErrorAction SilentlyContinue)
-            if ($infs.Count -ge 1) { $infPath = $infs[0].FullName }
-        } catch {
-            Write-Host ("Driver download failed: {0}" -f $_.Exception.Message) -ForegroundColor Red
-        }
-    }
-    if ([string]::IsNullOrWhiteSpace($infPath)) {
-        Write-Host ("Driver files for '{0}' were not found." -f $preset.Make) -ForegroundColor Yellow
-        Write-Host 'Download the universal driver from the vendor site (e.g. Konica Minolta Universal PCL6),' -ForegroundColor Yellow
-        Write-Host 'extract it, and point Software.json PrinterDrivers Path at the folder (or fill Url).' -ForegroundColor Yellow
-        $manualInf = ((Read-Host 'Or enter a full path to an .inf file now (blank to cancel)') | ForEach-Object { "$_".Trim() })
-        if ([string]::IsNullOrWhiteSpace($manualInf) -or -not (Test-Path -LiteralPath $manualInf -PathType Leaf)) {
-            Write-Host 'Printer install cancelled (no driver INF).' -ForegroundColor DarkYellow
-            $script:failed.Add('Printer install skipped: no driver INF')
-            return
-        }
-        $infPath = $manualInf
-    }
-
-    # --- Import the driver, auto-detecting its real name (works in EN and FR Windows). ---
+    # If the driver is already registered, no files are needed at all. This also
+    # matters in online mode, where the Drivers/ folder is not downloaded.
     $driversBefore = @(Get-PrinterDriver -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+    $driverName = ''
     $skipImport = $false
-    if ((-not [string]::IsNullOrWhiteSpace([string]$preset.DriverHint))) {
-        $alreadyThere = @($driversBefore | Where-Object { "$_" -ieq ([string]$preset.DriverHint) })
+    $driverHint = [string]$preset.DriverHint
+    if (-not [string]::IsNullOrWhiteSpace($driverHint)) {
+        $alreadyThere = @($driversBefore | Where-Object { "$_" -ieq $driverHint })
         if ($alreadyThere.Count -ge 1) {
             Write-Host ("Driver already installed, reusing: '{0}'" -f $alreadyThere[0]) -ForegroundColor Green
             $driverName = $alreadyThere[0]
             $skipImport = $true
         }
     }
+
+    # --- Driver files: local folder/INF, persistent cache, GitHub, Url, or manual path. ---
+    $infPath = ''
     if (-not $skipImport) {
+        $driverDir = ''
+        $relativeDriverPath = ''
+        $presetPath = ([string]$preset.Path).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($presetPath)) {
+            if ([System.IO.Path]::IsPathRooted($presetPath)) {
+                $driverDir = $presetPath
+            } else {
+                $driverDir = Join-Path $script:scriptRoot $presetPath
+                $relativeDriverPath = ($presetPath -replace '\\', '/').Trim('/')
+            }
+        }
+        $presetUrl = ''
+        if ($null -ne $preset.Url) { $presetUrl = ([string]$preset.Url).Trim() }
+
+        # 1) Folder next to the script (local copy / Git clone).
+        if (-not [string]::IsNullOrWhiteSpace($driverDir)) {
+            if ((Test-Path -LiteralPath $driverDir -PathType Leaf) -and $driverDir.ToLowerInvariant().EndsWith('.inf')) {
+                $infPath = $driverDir
+            } else {
+                $infPath = Resolve-DriverInfPath -Folder $driverDir
+            }
+        }
+
+        # 2) Persistent cache from a previous run (ProgramData, survives the
+        #    online staging folder being wiped).
+        $cacheDir = ''
+        if ([string]::IsNullOrWhiteSpace($infPath) -and (-not [string]::IsNullOrWhiteSpace($relativeDriverPath))) {
+            $leaf = Split-Path -Leaf $relativeDriverPath
+            if (-not [string]::IsNullOrWhiteSpace($leaf)) {
+                try { $cacheDir = Join-Path (Get-DriverCacheRoot) $leaf } catch { $cacheDir = '' }
+                if (-not [string]::IsNullOrWhiteSpace($cacheDir) -and (Test-Path -LiteralPath (Join-Path $cacheDir '.complete') -PathType Leaf)) {
+                    $infPath = Resolve-DriverInfPath -Folder $cacheDir
+                }
+            }
+        }
+
+        # 3) Online mode: Drivers/ is not staged, so fetch the folder from the repo.
+        if ([string]::IsNullOrWhiteSpace($infPath) -and (-not [string]::IsNullOrWhiteSpace($relativeDriverPath)) -and (-not [string]::IsNullOrWhiteSpace($cacheDir))) {
+            Write-Host 'Driver files are not present locally; fetching them from the repository ...' -ForegroundColor Cyan
+            if (Save-DriverFolderFromGitHub -RepoPath $relativeDriverPath -Destination $cacheDir) {
+                $infPath = Resolve-DriverInfPath -Folder $cacheDir
+                if (-not [string]::IsNullOrWhiteSpace($infPath)) {
+                    Write-Host ("Driver files saved to {0}" -f $cacheDir) -ForegroundColor DarkGray
+                }
+            }
+        }
+
+        # 4) Preset Url (vendor download).
+        if ([string]::IsNullOrWhiteSpace($infPath) -and (-not [string]::IsNullOrWhiteSpace($presetUrl))) {
+            try {
+                if ([string]::IsNullOrWhiteSpace($driverDir)) {
+                    if (-not [string]::IsNullOrWhiteSpace($cacheDir)) { $driverDir = $cacheDir }
+                    else { $driverDir = Join-Path $script:scriptRoot 'Drivers' }
+                }
+                New-Item -ItemType Directory -Path $driverDir -Force -ErrorAction Stop | Out-Null
+                $uri = [System.Uri]$presetUrl
+                $dlName = [System.IO.Path]::GetFileName($uri.LocalPath)
+                if ([string]::IsNullOrWhiteSpace($dlName)) { $dlName = 'driver_package.zip' }
+                $dlPath = Join-Path $driverDir $dlName
+                Write-Host ("Downloading driver from {0} ..." -f $presetUrl) -ForegroundColor Cyan
+                $dlParams = @{ Uri = $presetUrl; OutFile = $dlPath; ErrorAction = 'Stop' }
+                if ($PSVersionTable.PSVersion.Major -le 5) { $dlParams['UseBasicParsing'] = $true }
+                Invoke-WebRequest @dlParams
+                if ($dlPath.ToLowerInvariant().EndsWith('.zip')) {
+                    Expand-Archive -LiteralPath $dlPath -DestinationPath $driverDir -Force -ErrorAction Stop
+                }
+                $infs = @(Get-ChildItem -LiteralPath $driverDir -Filter '*.inf' -File -Recurse -ErrorAction SilentlyContinue)
+                if ($infs.Count -ge 1) { $infPath = $infs[0].FullName }
+            } catch {
+                Write-Host ("Driver download failed: {0}" -f $_.Exception.Message) -ForegroundColor Red
+            }
+        }
+
+        # 5) Last resort: manual path.
+        if ([string]::IsNullOrWhiteSpace($infPath)) {
+            Write-Host ("Driver files for '{0}' were not found." -f $preset.Make) -ForegroundColor Yellow
+            Write-Host 'Download the universal driver from the vendor site, extract it,' -ForegroundColor Yellow
+            Write-Host 'and point Software.json PrinterDrivers Path at the folder (or fill Url).' -ForegroundColor Yellow
+            $manualInf = ((Read-Host 'Or enter a full path to an .inf file now (blank to cancel)') | ForEach-Object { "$_".Trim() })
+            if ([string]::IsNullOrWhiteSpace($manualInf) -or -not (Test-Path -LiteralPath $manualInf -PathType Leaf)) {
+                Write-Host 'Printer install cancelled (no driver INF).' -ForegroundColor DarkYellow
+                $script:failed.Add('Printer install skipped: no driver INF')
+                return
+            }
+            $infPath = $manualInf
+        }
+    }
+
+    # --- Import the driver, auto-detecting its real name (works in EN and FR Windows). ---
+    if (-not $skipImport) {
+
     Write-Host ("Importing driver from {0} ..." -f $infPath) -ForegroundColor Cyan
 
     # Stage 1: Use pnputil to stage the driver package into the Windows driver store.

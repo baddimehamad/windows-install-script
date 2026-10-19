@@ -25,9 +25,11 @@
     irm https://raw.githubusercontent.com/baddimehamad/windows-install-script/main/Setup-Online.ps1 | iex
 
 .NOTES
-    Local files (OfficeSetup.exe, Drivers/, Installers/ content) are not part
-    of the online download. Those menu items show FILE NOT FOUND / WILL DOWNLOAD
+    Local files (OfficeSetup.exe, Installers/ content) are not part of the
+    online download. Those menu items show FILE NOT FOUND / WILL DOWNLOAD
     unless they carry a Url (downloaded on demand) or you copy files in manually.
+    Printer driver folders are downloaded automatically when you install a
+    printer, into C:\ProgramData\Windows_Auto_Setup_Online\Drivers (cached).
 #>
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12

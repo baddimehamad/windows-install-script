@@ -102,7 +102,7 @@ Want your own memorable word? Paste the full URL into https://tinyurl.com and cr
 
 This downloads 2 small files (`Install-MyPC.ps1` + `Software.json`, ~60 KB) to a staging folder and starts the setup. Approve the UAC prompt when it appears.
 
-> Note: local-only files are not downloaded: `OfficeSetup.exe`, `Installers/` content and `Drivers/` printer folders (the ~100 MB repo ZIP is skipped on purpose for speed). Those menu items show `FILE NOT FOUND` unless they carry a `Url` (downloaded on demand, e.g. French Office, Chrome fallback) or you copy the files in manually afterwards. Winget apps work normally.
+> Note: local-only files are not downloaded up front: `OfficeSetup.exe` and `Installers/` content show `FILE NOT FOUND` unless they carry a `Url` (downloaded on demand, e.g. French Office, Chrome fallback) or you copy them in manually. Printer driver folders (`Drivers/`) **are fetched automatically on demand** into `C:\ProgramData\Windows_Auto_Setup_Online\Drivers` the first time you install a printer (cached for later runs). Winget apps work normally.
 
 Example session:
 
@@ -263,7 +263,7 @@ Driver presets live in the `PrinterDrivers` array in `Software.json`:
 }
 ```
 
-- `Path` is a folder holding the extracted driver (`.inf` + `.cat` + `.dll`). For Konica Minolta: download the Universal PCL6/V4 driver from Konica Minolta's support site, extract the ZIP into `Drivers\konika_minolta\` (already wired in `Software.json`).
+- `Path` is a folder holding the extracted driver (`.inf` + `.cat` + `.dll`). If the folder is missing (typical in online mode), the script downloads it from the repository into `C:\ProgramData\Windows_Auto_Setup_Online\Drivers\<folder>` automatically, verifies every file size, and reuses it on later runs. If the driver is already installed, no download is needed at all.
 - Or set `Url` to a direct driver ZIP link and the script downloads + extracts it.
 - Or type an `.inf` path directly when asked.
 - The driver is imported with `pnputil`, and its real name is auto-detected (works on French and English Windows). `DriverHint` is only a fallback.
