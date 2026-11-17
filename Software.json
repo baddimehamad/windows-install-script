@@ -16,6 +16,14 @@
       "Enabled": true
     },
     {
+      "Name": "Mozilla Firefox 151.0 (pinned example)",
+      "Type": "winget",
+      "Id": "Mozilla.Firefox",
+      "Version": "151.0",
+      "Logo": "logo/firefox.png",
+      "Enabled": false
+    },
+    {
       "Name": "7-Zip",
       "Type": "winget",
       "Id": "7zip.7zip",

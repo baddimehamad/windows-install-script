@@ -64,6 +64,22 @@ function Write-SetupLog {
     try { [void](& $script:LogSink $Level $Message) } catch { }
 }
 
+function Get-SetupCatalogEntry {
+    <#
+    .SYNOPSIS
+        Returns the Software.json entry behind a catalog display item.
+    .DESCRIPTION
+        Get-SoftwareCatalog wraps each entry for the front-ends. Actions that
+        need the configured fields (Id, Path, Url, Version, FallbackUrl) accept
+        both shapes so a caller can pass either one.
+    #>
+    param($Item)
+    if ($null -eq $Item) { return $null }
+    $property = $Item.PSObject.Properties['Item']
+    if ($null -ne $property -and $null -ne $property.Value) { return $property.Value }
+    return $Item
+}
+
 function New-SetupResult {
     <#
     .SYNOPSIS
@@ -122,16 +138,21 @@ function Get-SoftwareCatalog {
         if ($null -eq $app -or $app.Enabled -eq $false) { continue }
         if ([string]$app.Type -ne 'winget' -or [string]::IsNullOrWhiteSpace([string]$app.Id)) { continue }
         $hasFallback = ($null -ne $app.FallbackUrl) -and (-not [string]::IsNullOrWhiteSpace([string]$app.FallbackUrl))
+        $pinnedVersion = [string]$app.Version
+        $pinned = -not [string]::IsNullOrWhiteSpace($pinnedVersion)
         $detail = ("Winget ID: {0}" -f [string]$app.Id)
+        if ($pinned) { $detail = $detail + (" | pinned version {0}" -f $pinnedVersion) }
         if ($hasFallback) { $detail = $detail + ' [+direct-download fallback]' }
         [void]$items.Add([pscustomobject]@{
-            Kind         = 'winget'
-            Name         = [string]$app.Name
-            Detail       = $detail
-            Id           = [string]$app.Id
-            Exists       = $true
-            WillDownload = $false
-            Item         = $app
+            Kind          = 'winget'
+            Name          = [string]$app.Name
+            Detail        = $detail
+            Id            = [string]$app.Id
+            Version       = $pinnedVersion
+            Pinned        = $pinned
+            Exists        = $true
+            WillDownload  = $false
+            Item          = $app
         })
     }
 
@@ -294,6 +315,8 @@ function Install-SetupWingetFallback {
     #>
     param([Parameter(Mandatory = $true)]$App)
 
+    $App = Get-SetupCatalogEntry -Item $App
+    if ($null -eq $App) { return $null }
     $fallbackUrl = ''
     if ($null -ne $App.FallbackUrl) { $fallbackUrl = ([string]$App.FallbackUrl).Trim() }
     if ([string]::IsNullOrWhiteSpace($fallbackUrl)) { return $null }
@@ -343,10 +366,18 @@ function Install-SetupWingetApp {
     #>
     param([Parameter(Mandatory = $true)]$App)
 
+    $displayName = [string]$App.Name
+    $App = Get-SetupCatalogEntry -Item $App
+    if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = [string]$App.Name }
+    $pinnedVersion = [string]$App.Version
+    $pinned = -not [string]::IsNullOrWhiteSpace($pinnedVersion)
+    $name = [string]$App.Name
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = $displayName }
+
     $winget = Get-WingetCommand
     if ($null -eq $winget) {
-        Write-SetupLog -Level Warning -Message ("Skipping {0}: winget is not available." -f $App.Name)
-        return New-SetupResult -Name ([string]$App.Name) -Success $false `
+        Write-SetupLog -Level Warning -Message ("Skipping {0}: winget is not available." -f $name)
+        return New-SetupResult -Name $name -Success $false `
             -Message 'winget is not available. Install Microsoft App Installer (https://aka.ms/getwinget).'
     }
 
@@ -361,7 +392,7 @@ function Install-SetupWingetApp {
 
     [void](Repair-SetupWingetSource)
 
-    Write-SetupLog -Level Task -Message ("Installing {0} ({1})" -f $App.Name, $App.Id)
+    Write-SetupLog -Level Task -Message ("Installing {0} ({1})" -f $name, $App.Id)
     # Keep the buffered capture: hash-mismatch detection needs the full text,
     # and the wording differs between English and French Windows.
     $wingetArgs = @(
@@ -369,6 +400,12 @@ function Install-SetupWingetApp {
         '--silent', '--accept-package-agreements', '--accept-source-agreements',
         '--disable-interactivity'
     )
+    if ($pinned) {
+        # --force makes winget apply the pin even when another version is
+        # already installed. Without it, winget refuses to change the version.
+        $wingetArgs += @('--version', $pinnedVersion, '--force')
+        Write-SetupLog -Level Info -Message ("Pinned version requested: {0}" -f $pinnedVersion)
+    }
     $wingetOut = & $winget.Source @wingetArgs 2>&1 | Out-String
     if (-not [string]::IsNullOrWhiteSpace($wingetOut)) {
         Write-SetupLog -Level Detail -Message $wingetOut.TrimEnd()
@@ -378,17 +415,21 @@ function Install-SetupWingetApp {
 
     # 0x8A15002B (-1978335189) is winget's "already installed" result.
     if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq -1978335189) {
-        Write-SetupLog -Level Success -Message ("Finished: {0} (exit code {1})" -f $App.Name, $exitCode)
+        Write-SetupLog -Level Success -Message ("Finished: {0} (exit code {1})" -f $name, $exitCode)
         if ($exitCode -eq 3010) { Write-SetupLog -Level Warning -Message 'A restart may be required.' }
-        return New-SetupResult -Name $App.Name -Success $true -ExitCode $exitCode `
+        return New-SetupResult -Name $name -Success $true -ExitCode $exitCode `
             -RestartRequired ($exitCode -eq 3010) -Message 'Installed.'
     }
 
     if ($hashMismatch) {
         Write-SetupLog -Level Warning -Message 'Winget reports an installer hash mismatch (stale manifest on the server side).'
-        Write-SetupLog -Level Warning -Message 'Winget refuses "--ignore-security-hash" while running as administrator, so trying the direct download instead.'
-        $fallback = Install-SetupWingetFallback -App $App
-        if ($null -ne $fallback) { return $fallback }
+        if ($pinned) {
+            Write-SetupLog -Level Warning -Message 'The direct-download fallback is disabled for a pinned version because it downloads the vendor latest.'
+        } else {
+            Write-SetupLog -Level Warning -Message 'Winget refuses "--ignore-security-hash" while running as administrator, so trying the direct download instead.'
+            $fallback = Install-SetupWingetFallback -App $App
+            if ($null -ne $fallback) { return $fallback }
+        }
     }
 
     # One automatic retry: if sources broke mid-run (e.g. exit 1978335217 /
@@ -404,36 +445,40 @@ function Install-SetupWingetApp {
         }
         $exitCode = $LASTEXITCODE
         if ($wingetOut -match '(?i)hash|hachage|mismatch|non concordance|ne correspond pas') {
-            Write-SetupLog -Level Warning -Message 'Retry also reports a hash mismatch; trying the direct download instead.'
-            $fallback = Install-SetupWingetFallback -App $App
-            if ($null -ne $fallback) { return $fallback }
+            if ($pinned) {
+                Write-SetupLog -Level Warning -Message 'Retry also reports a hash mismatch; the pinned entry has no direct-download fallback.'
+            } else {
+                Write-SetupLog -Level Warning -Message 'Retry also reports a hash mismatch; trying the direct download instead.'
+                $fallback = Install-SetupWingetFallback -App $App
+                if ($null -ne $fallback) { return $fallback }
+            }
         }
         if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq -1978335189) {
-            Write-SetupLog -Level Success -Message ("Finished on retry: {0} (exit code {1})" -f $App.Name, $exitCode)
+            Write-SetupLog -Level Success -Message ("Finished on retry: {0} (exit code {1})" -f $name, $exitCode)
             if ($exitCode -eq 3010) { Write-SetupLog -Level Warning -Message 'A restart may be required.' }
-            return New-SetupResult -Name $App.Name -Success $true -ExitCode $exitCode `
+            return New-SetupResult -Name $name -Success $true -ExitCode $exitCode `
                 -RestartRequired ($exitCode -eq 3010) -Message 'Installed on retry.'
         }
     }
 
     # Last resort for apps with a configured direct download.
-    if (($null -ne $App.FallbackUrl) -and (-not [string]::IsNullOrWhiteSpace([string]$App.FallbackUrl))) {
-        Write-SetupLog -Level Warning -Message ("Winget failed for {0}; trying the configured direct download..." -f $App.Name)
+    if ((-not $pinned) -and ($null -ne $App.FallbackUrl) -and (-not [string]::IsNullOrWhiteSpace([string]$App.FallbackUrl))) {
+        Write-SetupLog -Level Warning -Message ("Winget failed for {0}; trying the configured direct download..." -f $name)
         $fallback = Install-SetupWingetFallback -App $App
         if ($null -ne $fallback) { return $fallback }
     }
 
     if ($exitCode -eq 1978335217 -or $exitCode -eq -1978335217) {
-        Write-SetupLog -Level Warning -Message ("Installer returned exit code {0}: {1}" -f $exitCode, $App.Name)
+        Write-SetupLog -Level Warning -Message ("Installer returned exit code {0}: {1}" -f $exitCode, $name)
         Write-SetupLog -Level Warning -Message 'This is a Winget source error ("Failed when opening sources").'
         Write-SetupLog -Level Warning -Message 'Fix: open a new admin PowerShell and run "winget source reset --force", then "winget source update", then rerun.'
         Write-SetupLog -Level Warning -Message 'Also update App Installer: https://aka.ms/getwinget'
-        return New-SetupResult -Name $App.Name -Success $false -ExitCode $exitCode `
+        return New-SetupResult -Name $name -Success $false -ExitCode $exitCode `
             -Message 'Winget source error. See the log for the manual fix.'
     }
 
-    Write-SetupLog -Level Warning -Message ("Installer returned exit code {0}: {1}" -f $exitCode, $App.Name)
-    return New-SetupResult -Name $App.Name -Success $false -ExitCode $exitCode `
+    Write-SetupLog -Level Warning -Message ("Installer returned exit code {0}: {1}" -f $exitCode, $name)
+    return New-SetupResult -Name $name -Success $false -ExitCode $exitCode `
         -Message ("Installer returned exit code {0}." -f $exitCode)
 }
 
@@ -444,7 +489,10 @@ function Install-SetupLocalPackage {
     #>
     param([Parameter(Mandatory = $true)]$Installer)
 
+    $displayName = [string]$Installer.Name
+    $Installer = Get-SetupCatalogEntry -Item $Installer
     $name = [string]$Installer.Name
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = $displayName }
     $relativePath = [string]$Installer.Path
     if ([string]::IsNullOrWhiteSpace($relativePath)) {
         Write-SetupLog -Level Warning -Message ("Skipping {0}: no Path is configured in Software.json." -f $name)
@@ -724,6 +772,82 @@ function Invoke-SetupUninstallCommand {
     return $process.ExitCode
 }
 
+function ConvertTo-SetupVersionParts {
+    <#
+    .SYNOPSIS
+        Extracts the dotted numeric parts of a version string.
+    #>
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
+    $match = [regex]::Match($Text, '\d+(?:\.\d+)+')
+    if (-not $match.Success) { return $null }
+    return @($match.Value -split '\.' | ForEach-Object { [long]$_ })
+}
+
+function Compare-SetupVersionText {
+    <#
+    .SYNOPSIS
+        Compares two version strings numerically.
+    .OUTPUTS
+        -1 when Left is older, 0 when equal, 1 when Left is newer, or $null when
+        either value has no dotted numeric version.
+    #>
+    param([string]$Left, [string]$Right)
+
+    $a = ConvertTo-SetupVersionParts -Text $Left
+    $b = ConvertTo-SetupVersionParts -Text $Right
+    if ($null -eq $a -or $null -eq $b) { return $null }
+    $length = [Math]::Max($a.Count, $b.Count)
+    for ($index = 0; $index -lt $length; $index++) {
+        $x = if ($index -lt $a.Count) { $a[$index] } else { [long]0 }
+        $y = if ($index -lt $b.Count) { $b[$index] } else { [long]0 }
+        if ($x -lt $y) { return -1 }
+        if ($x -gt $y) { return 1 }
+    }
+    return 0
+}
+
+function Get-SetupWingetLatestVersion {
+    <#
+    .SYNOPSIS
+        Returns the version published by the winget source, or an empty string.
+    .DESCRIPTION
+        "winget list" only shows an installed package under the catalog ID when
+        winget manages that installation. Apps installed outside winget (Chrome
+        from its MSI, for example) appear under an ARP ID, so their update
+        status has to come from the source itself.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$Winget,
+        [string]$Id,
+        [hashtable]$Cache = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Id)) { return '' }
+    if ($null -ne $Cache -and $Cache.ContainsKey($Id)) { return [string]$Cache[$Id] }
+
+    $version = ''
+    try {
+        $output = & $Winget.Source show --id $Id --exact --source winget `
+            --accept-source-agreements --disable-interactivity 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0) {
+            # The label is localized (for example "Version :" or "Version: "),
+            # so match it loosely and keep the value ASCII.
+            $match = [regex]::Match($output, '(?im)^\s*Versi\S*\s*:\s*(\S+)')
+            if (-not $match.Success) {
+                # Locales such as Russian or Japanese use a different label.
+                # The package version is the first "field: dotted.version" line.
+                $match = [regex]::Match($output, '(?im)^[^:\r\n]+:\s*(\d+(?:\.\d+)+)\s*$')
+            }
+            if ($match.Success) { $version = $match.Groups[1].Value.Trim() }
+        }
+    } catch {
+        $version = ''
+    }
+    if ($null -ne $Cache) { $Cache[$Id] = $version }
+    return $version
+}
+
 function Get-SetupInstalledSoftware {
     <#
     .SYNOPSIS
@@ -763,6 +887,7 @@ function Get-SetupInstalledSoftware {
     $packages = [System.Collections.Generic.List[object]]::new()
     $installedCount = 0
     $updateCount = 0
+    $latestVersionCache = @{}
 
     foreach ($item in $catalog) {
         $registryEntry = $null
@@ -782,18 +907,48 @@ function Get-SetupInstalledSoftware {
             $version = [string]$wingetRow.Version
         }
 
+        $pinned = ($null -ne $item.PSObject.Properties['Pinned']) -and [bool]$item.Pinned
+        $pinnedVersion = ''
+        if ($null -ne $item.PSObject.Properties['Version']) { $pinnedVersion = [string]$item.Version }
+
         $available = ''
         $updateKnown = $false
         $updateSource = ''
-        if ($null -ne $wingetRow) {
+        $updateMethod = ''
+        if ($pinned) {
+            # Pinned entries stay on the requested version by design.
+            $updateKnown = $true
+        } elseif ($null -ne $wingetRow) {
             $available = [string]$wingetRow.Available
             $updateSource = [string]$wingetRow.Source
             # "winget list" also reports Microsoft Store packages. Updates are
             # only offered for the winget source because the update command is
             # pinned to it.
             $updateKnown = ($updateSource -eq 'winget')
+        } elseif ($item.Kind -eq 'winget' -and $null -ne $registryEntry -and $null -ne $winget) {
+            # Installed, but winget does not manage this installation: Chrome
+            # from its MSI shows up as an ARP entry. Compare the installed
+            # version with the version published by the winget source instead
+            # of reporting Unknown for ever.
+            $latest = Get-SetupWingetLatestVersion -Winget $winget -Id ([string]$item.Id) -Cache $latestVersionCache
+            if (-not [string]::IsNullOrWhiteSpace($latest)) {
+                $comparison = Compare-SetupVersionText -Left $version -Right $latest
+                if ($null -ne $comparison) {
+                    $updateKnown = $true
+                    if ($comparison -lt 0) {
+                        $available = $latest
+                        # "winget upgrade" cannot see this installation; a
+                        # forced install of the same package applies the update.
+                        $updateMethod = 'install'
+                    }
+                }
+            }
         }
+
         $updateAvailable = $updateKnown -and (-not [string]::IsNullOrWhiteSpace($available)) -and ($available -ne $version)
+        if ($updateAvailable -and [string]::IsNullOrWhiteSpace($updateMethod) -and $null -ne $wingetRow) {
+            $updateMethod = 'upgrade'
+        }
 
         $hasRegistryUninstall = ($null -ne $registryEntry) -and (
             (-not [string]::IsNullOrWhiteSpace($registryEntry.UninstallString)) -or
@@ -819,6 +974,9 @@ function Get-SetupInstalledSoftware {
             UpdateAvailable = $updateAvailable
             UpdateKnown     = $updateKnown
             UpdateSource    = $updateSource
+            UpdateMethod    = $updateMethod
+            Pinned          = $pinned
+            PinnedVersion   = $pinnedVersion
             WingetManaged   = $wingetManaged
             Uninstallable   = $uninstallable
             Source          = $source
@@ -852,8 +1010,12 @@ function Uninstall-SetupSoftware {
         [Nullable[bool]]$WingetManaged = $null
     )
 
+    $entry = Get-SetupCatalogEntry -Item $CatalogItem
     $name = [string]$CatalogItem.Name
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = [string]$entry.Name }
     if ([string]::IsNullOrWhiteSpace($name)) { $name = 'Software' }
+    $id = [string]$CatalogItem.Id
+    if ([string]::IsNullOrWhiteSpace($id)) { $id = [string]$entry.Id }
 
     $useWinget = ($CatalogItem.Kind -eq 'winget')
     if ($null -ne $WingetManaged) {
@@ -869,9 +1031,9 @@ function Uninstall-SetupSoftware {
             Write-SetupLog -Level Warning -Message ("Cannot uninstall {0}: winget is not available." -f $name)
             return New-SetupResult -Name $name -Success $false -Message 'winget is not available.'
         }
-        Write-SetupLog -Level Task -Message ("Uninstalling {0} ({1})" -f $name, $CatalogItem.Id)
+        Write-SetupLog -Level Task -Message ("Uninstalling {0} ({1})" -f $name, $id)
         $wingetArgs = @(
-            'uninstall', '--id', [string]$CatalogItem.Id, '--exact', '--all',
+            'uninstall', '--id', $id, '--exact', '--all',
             '--silent', '--accept-source-agreements', '--disable-interactivity'
         )
         try {
@@ -930,16 +1092,35 @@ function Uninstall-SetupSoftware {
 function Update-SetupSoftware {
     <#
     .SYNOPSIS
-        Updates one winget-managed catalog item to the latest available
-        version.
+        Updates one winget catalog item to the latest available version.
+    .DESCRIPTION
+        Method "upgrade" uses "winget upgrade" and is the normal path.
+        Method "install" is for a package winget can see in its source but not
+        in its installed list (Chrome from its MSI, for example): a forced
+        install of the same package applies the update.
     #>
-    param([Parameter(Mandatory = $true)]$CatalogItem)
+    param(
+        [Parameter(Mandatory = $true)]$CatalogItem,
+        [ValidateSet('upgrade', 'install')][string]$Method = 'upgrade'
+    )
 
+    $entry = Get-SetupCatalogEntry -Item $CatalogItem
     $name = [string]$CatalogItem.Name
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = [string]$entry.Name }
     if ([string]::IsNullOrWhiteSpace($name)) { $name = 'Software' }
+    $id = [string]$CatalogItem.Id
+    if ([string]::IsNullOrWhiteSpace($id)) { $id = [string]$entry.Id }
+
+    $pinnedVersion = ''
+    if ($null -ne $entry.PSObject.Properties['Version']) { $pinnedVersion = ([string]$entry.Version).Trim() }
     if ($CatalogItem.Kind -ne 'winget') {
         return New-SetupResult -Name $name -Success $true -Skipped $true `
             -Message 'Local installers are updated by running the installer again.'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($pinnedVersion)) {
+        Write-SetupLog -Level Info -Message ("{0} is pinned to version {1}; it is not updated automatically." -f $name, $pinnedVersion)
+        return New-SetupResult -Name $name -Success $true -Skipped $true `
+            -Message ("Pinned to version {0}." -f $pinnedVersion)
     }
 
     $winget = Get-WingetCommand
@@ -948,12 +1129,20 @@ function Update-SetupSoftware {
         return New-SetupResult -Name $name -Success $false -Message 'winget is not available.'
     }
 
-    Write-SetupLog -Level Task -Message ("Updating {0} ({1})" -f $name, $CatalogItem.Id)
+    Write-SetupLog -Level Task -Message ("Updating {0} ({1})" -f $name, $id)
     $wingetArgs = @(
-        'upgrade', '--id', [string]$CatalogItem.Id, '--exact', '--source', 'winget',
+        'upgrade', '--id', $id, '--exact', '--source', 'winget',
         '--silent', '--accept-package-agreements', '--accept-source-agreements',
         '--disable-interactivity'
     )
+    if ($Method -eq 'install') {
+        Write-SetupLog -Level Info -Message 'Winget does not manage this installation; reinstalling the latest version from its source.'
+        $wingetArgs = @(
+            'install', '--id', $id, '--exact', '--source', 'winget',
+            '--silent', '--force', '--accept-package-agreements', '--accept-source-agreements',
+            '--disable-interactivity'
+        )
+    }
     try {
         $output = & $winget.Source @wingetArgs 2>&1 | Out-String
         $exitCode = $LASTEXITCODE

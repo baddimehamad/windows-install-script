@@ -291,6 +291,7 @@ $script:StringTable = @{
     'Check.Latest'              = @{ en = "Up to date"; fr = "A jour" }
     'Check.Manual'              = @{ en = "Manual"; fr = "Manuel" }
     'Check.Unknown'             = @{ en = "Unknown"; fr = "Inconnu" }
+    'Check.Pinned'              = @{ en = "Pinned"; fr = "Version figee" }
     'Check.WingetMissing'       = @{ en = "winget is not available, so update information cannot be checked."; fr = "winget est indisponible : les mises a jour ne peuvent pas etre verifiees." }
 
     'Update.NothingTitle'       = @{ en = "Nothing to update"; fr = "Aucune mise a jour" }
@@ -1403,6 +1404,9 @@ function New-SoftwareRow {
         Status          = $status
         Installed       = $false
         UpdateAvailable = $false
+        UpdateMethod    = ''
+        Pinned          = $false
+        PinnedVersion   = ''
         Uninstallable   = $false
         WingetManaged   = $false
     }
@@ -1522,6 +1526,10 @@ function Complete-SoftwareCheck {
         $row.UpdateAvailable = [bool]$check.UpdateAvailable
         $row.Uninstallable = [bool]$check.Uninstallable
         $row.WingetManaged = [bool]$check.WingetManaged
+        $row.UpdateMethod = [string]$check.UpdateMethod
+        $row.Pinned = ($null -ne $check.PSObject.Properties['Pinned']) -and [bool]$check.Pinned
+        $row.PinnedVersion = ''
+        if ($null -ne $check.PSObject.Properties['PinnedVersion']) { $row.PinnedVersion = [string]$check.PinnedVersion }
 
         if (-not $row.Installed) {
             $row.Version.Text = Get-UiText 'Check.NotInstalled'
@@ -1538,7 +1546,12 @@ function Complete-SoftwareCheck {
         $row.Version.Text = $versionText
         $row.Version.Foreground = Get-Brush '#3A4650'
 
-        if ($check.UpdateAvailable) {
+        if ($row.Pinned) {
+            $row.Update.Text = Get-UiText 'Check.Pinned'
+            $row.Update.Foreground = Get-Brush '#5F6B76'
+            $row.Update.ToolTip = ('{0}: {1}' -f (Get-UiText 'Check.Pinned'), $row.PinnedVersion)
+            Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Installed') -Tone 'Good'
+        } elseif ($check.UpdateAvailable) {
             $row.Update.Text = [string]$check.Available
             $row.Update.Foreground = Get-Brush '#9A6100'
             $row.Update.ToolTip = ((Get-UiText 'Software.ColUpdate') + ': ' + [string]$check.Available)
@@ -1681,8 +1694,10 @@ function Start-NextSoftware {
         'update' {
             Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Updating') -Tone 'Accent'
             $label = ((Get-UiText 'Update.Step') -f $row.Name, $script:QueueIndex, $script:QueueTotal)
+            $method = [string]$row.UpdateMethod
+            if ([string]::IsNullOrWhiteSpace($method)) { $method = 'upgrade' }
             Start-SetupTask -Label $label -Command 'Update-SetupSoftware' `
-                -Parameters @{ CatalogItem = $row.Item } -OnComplete 'Complete-SoftwareStep'
+                -Parameters @{ CatalogItem = $row.Item; Method = $method } -OnComplete 'Complete-SoftwareStep'
         }
         'uninstall' {
             Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Uninstalling') -Tone 'Accent'
