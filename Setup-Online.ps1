@@ -141,13 +141,20 @@ function Get-CatalogLogoFiles {
 
 try {
     $BaseDir = Get-StagingBase
-    $WorkDir = Join-Path $BaseDir 'src'
+
+    # Use a fresh subfolder per run. The window runs elevated and writes its
+    # log inside this folder; those files are then read-only for a later
+    # non-elevated launcher, which made a fixed "src" folder impossible to
+    # reuse. Old folders are pruned best-effort but never required.
+    Get-ChildItem -LiteralPath $BaseDir -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq 'src' -or $_.Name -like 'src-*' } |
+        ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    $WorkDir = Join-Path $BaseDir ('src-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 
     Write-Host "Staging folder: $BaseDir" -ForegroundColor DarkGray
 
-    if (Test-Path -LiteralPath $WorkDir) {
-        Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction Stop
-    }
     New-Item -ItemType Directory -Path $WorkDir -Force -ErrorAction Stop | Out-Null
 
     foreach ($file in $NeededFiles) {
