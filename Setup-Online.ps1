@@ -4,12 +4,13 @@
     Online launcher for Windows Automatic Setup.
 
 .DESCRIPTION
-    Downloads only the files needed to run (Install-MyPC.ps1, Setup.Core.psm1
-    and Software.json) into a shared folder, then runs Install-MyPC.ps1 from
-    disk. Running from disk is required because the scripts use their own file
-    location for elevation, Software.json lookup, and logging.
+    Downloads only the files needed to run (Install-MyPC.Gui.ps1,
+    Install-MyPC.ps1, Setup.Core.psm1 and Software.json) into a shared folder,
+    then runs Install-MyPC.Gui.ps1 (window) or Install-MyPC.ps1 (text menu)
+    from disk. Running from disk is required because the scripts use their own
+    file location for elevation, Software.json lookup, and logging.
 
-    Only ~100 KB is downloaded. The full repo ZIP is NOT used, because it
+    Only ~140 KB is downloaded. The full repo ZIP is NOT used, because it
     contains ~100 MB of printer drivers (Drivers/) that would make every
     first launch slow.
 
@@ -18,18 +19,18 @@
     and is invisible to a different admin account after the UAC prompt.
 
 .USAGE
-    Console, short:
+    Window (default), short:
     irm https://tinyurl.com/27wv3wmc | iex
 
-    Window (GUI), short:
-    $env:SETUP_GUI=1; irm https://tinyurl.com/27wv3wmc | iex
+    Console, short:
+    $env:SETUP_GUI=0; irm https://tinyurl.com/27wv3wmc | iex
 
     Full URL:
     irm https://raw.githubusercontent.com/baddimehamad/windows-install-script/main/Setup-Online.ps1 | iex
 
     From a downloaded copy:
-    .\Setup-Online.ps1            # console menu
-    .\Setup-Online.ps1 -Gui       # WPF window
+    .\Setup-Online.ps1            # WPF window (default)
+    .\Setup-Online.ps1 -Console   # text menu
 
 .NOTES
     Local files (OfficeSetup.exe, Installers/ content) are not part of the
@@ -40,10 +41,17 @@
 #>
 
 param(
+    [switch]$Console,
     [switch]$Gui
 )
 
-if (-not $Gui -and $env:SETUP_GUI -eq '1') { $Gui = $true }
+# Window by default. Use -Console or SETUP_GUI=0 for the text menu.
+$useGui = $true
+if ($env:SETUP_GUI -eq '0') { $useGui = $false }
+if ($env:SETUP_GUI -eq '1') { $useGui = $true }
+if ($Gui) { $useGui = $true }
+if ($Console) { $useGui = $false }
+$Gui = $useGui
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 

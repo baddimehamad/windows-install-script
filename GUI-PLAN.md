@@ -5,7 +5,8 @@
 >
 > Decision taken: **full WPF GUI + core refactor**, **two front-ends, one core**.
 >
-> Status: plan only — no code written yet.
+> Status: implemented. The window is now the default launcher; the text menu
+> remains available with `Run-Setup.bat console` or `SETUP_GUI=0`.
 
 ## Why WPF in PowerShell
 

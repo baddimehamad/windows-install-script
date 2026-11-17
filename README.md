@@ -17,20 +17,22 @@ On any PC with internet, open PowerShell and run:
 irm https://tinyurl.com/27wv3wmc | iex
 ```
 
-Prefer a real window instead of the console menu? Same command, one flag:
+This opens the **window** version by default. Prefer the text menu? Same command, one setting:
 
 ```powershell
-$env:SETUP_GUI=1; irm https://tinyurl.com/27wv3wmc | iex
+$env:SETUP_GUI=0; irm https://tinyurl.com/27wv3wmc | iex
 ```
 
 ---
 
 ## 🪟 Window mode (GUI)
 
-Both front-ends do exactly the same things; pick whichever you prefer.
+Both front-ends do exactly the same things; pick whichever you prefer. The window is the default.
 
-- **Console:** `Run-Setup.bat` or the one-liner above.
-- **Window:** `Run-Setup-Gui.bat`, or `.\Install-MyPC.Gui.ps1`, or the `SETUP_GUI=1` one-liner.
+- **Window (default):** `Run-Setup.bat`, `Run-Setup-Gui.bat`, `.\Install-MyPC.Gui.ps1`, or the one-liner above.
+- **Console:** `Run-Setup.bat console`, `.\Install-MyPC.ps1`, or the `SETUP_GUI=0` one-liner.
+
+From the window, the **Open console** button in the header switches to the text menu: it opens `Install-MyPC.ps1` in a new PowerShell window (already elevated) and closes the window. It is disabled while an install is running.
 
 The window has five tabs:
 
@@ -112,7 +114,7 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
      git clone https://github.com/baddimehamad/windows-install-script.git
      ```
 2. **(Optional) Add Office:** copy your `OfficeSetup.exe` next to `Install-MyPC.ps1` (same folder as `Run-Setup.bat`).
-3. **Run:** double-click **`Run-Setup.bat`** (console) or **`Run-Setup-Gui.bat`** (window) → approve the UAC prompt.
+3. **Run:** double-click **`Run-Setup.bat`** (the window opens) → approve the UAC prompt. For the text menu, open a Command Prompt in this folder and run **`Run-Setup.bat console`**, or double-click **`Run-Setup-Gui.bat`** for the window.
 4. **Choose:** enter e.g. `6` to run everything, or `1,3` for Administrator + software only. In the window, pick a tab and use its buttons.
    - If you chose option 1, type `YES`/`OUI` (any case: yes, Yes, oui...) to confirm, then enter a new password when asked (minimum 8 characters), then confirm it. Leave blank to cancel.
 5. **Pick software:** enter numbers like `1,3,5`, or `A` for all, or `0` to skip.
@@ -135,7 +137,7 @@ Want your own memorable word? Paste the full URL into https://tinyurl.com and cr
 
 </details>
 
-This downloads 3 small files (`Install-MyPC.ps1`, `Setup.Core.psm1` + `Software.json`, ~100 KB) to a staging folder and starts the setup. Add `Setup-Online.ps1 -Gui` (or set `$env:SETUP_GUI=1`) to also download and open the window version. Approve the UAC prompt when it appears.
+This downloads 4 small files (`Install-MyPC.Gui.ps1`, `Install-MyPC.ps1`, `Setup.Core.psm1` + `Software.json`, ~140 KB) to a staging folder and opens the window by default. Add `-Console` (or set `$env:SETUP_GUI=0`) to use the text menu instead. Approve the UAC prompt when it appears.
 
 > Note: local-only files are not downloaded up front: `OfficeSetup.exe` and `Installers/` content show `FILE NOT FOUND` unless they carry a `Url` (downloaded on demand, e.g. French Office, Chrome fallback) or you copy them in manually. Printer driver folders (`Drivers/`) **are fetched automatically on demand** into `C:\ProgramData\Windows_Auto_Setup_Online\Drivers` the first time you install a printer (cached for later runs). Winget apps work normally.
 
@@ -170,8 +172,8 @@ Software numbers: 1,3,5
 
 ```text
 windows-install-script/
-├── Run-Setup.bat      ← double-click to start (console menu)
-├── Run-Setup-Gui.bat  ← double-click to start (window)
+├── Run-Setup.bat      ← double-click to start (window; "console" for text menu)
+├── Run-Setup-Gui.bat  ← direct shortcut to the window
 ├── Install-MyPC.ps1   ← console front-end (auto-elevates to admin)
 ├── Install-MyPC.Gui.ps1 ← window front-end (auto-elevates to admin)
 ├── Setup.Core.psm1    ← shared logic used by both front-ends
@@ -184,9 +186,9 @@ windows-install-script/
 └── Logs/              ← created automatically, one log per run
 ```
 
-- **`Run-Setup.bat`** — launcher that runs the console script with bypassed execution policy and pauses so you can read the result.
-- **`Run-Setup-Gui.bat`** — launcher for the window version; it starts detached, so no console window stays open.
-- **`Install-MyPC.ps1`** — console front-end: prompts, menus and colours.
+- **`Run-Setup.bat`** — default launcher: starts the window detached (no console window stays open). Pass `console` to run the text menu in the current window instead.
+- **`Run-Setup-Gui.bat`** — direct shortcut to the window version; same detached start as `Run-Setup.bat`.
+- **`Install-MyPC.ps1`** — console front-end: prompts, menus and colours. Also started by the window's **Open console** button.
 - **`Install-MyPC.Gui.ps1`** — window front-end (WPF, embedded XAML).
 - **`Setup.Core.psm1`** — every action (Winget, local installers, printers, users, Administrator). Both front-ends call it, so a fix applies to both. It never prompts and never writes to the console.
 - **`Software.json`** — the only file you normally need to edit.
@@ -346,7 +348,7 @@ Safety: if only one enabled administrator is left on the PC, its group membershi
 | App shows wrong version / fails | Verify the Winget ID with `winget search <name>` and update `Software.json`. Vendors rename IDs sometimes. |
 | `Software.json could not be parsed` | You broke the JSON (missing comma/quote). Validate it at https://jsonlint.com |
 | Local installer `FILE NOT FOUND` | Check the `Path` in `Software.json` — relative to the script folder. |
-| Nothing happens after double-click | Right-click `Run-Setup.bat` → **Run as administrator**, and approve UAC. Check `Logs\setup-*.log`. |
+| Nothing happens after double-click | Right-click `Run-Setup.bat` → **Run as administrator**, and approve UAC. Check `Logs\gui-*.log`. For the text menu, run `Run-Setup.bat console` in a Command Prompt. |
 | `Failed when opening sources` / exit `1978335217` | Corrupt Winget source DB (the script now auto-resets once). Manual fix: `winget source reset --force`, then `winget source update`, then rerun. Update App Installer: https://aka.ms/getwinget. If logged in as built-in Administrator, try a regular admin account instead. |
 | Installer hash mismatch (can't override as admin) | Stale Winget manifest. The script now falls back to the vendor's direct download when `FallbackUrl` is set (Chrome included). Or wait a day and rerun after `winget source update`. |
 | Printer: driver did not register | `pnputil` "already exists" results are accepted automatically; a real failure prints its output. Check the INF matches this Windows (x64 `NTamd64`), or let the `printui` fallback run. |
@@ -356,6 +358,7 @@ Safety: if only one enabled administrator is left on the PC, its group membershi
 | Window doesn't open | The window needs WPF, which is part of Windows 10/11. Check `Logs\gui-*.log`; if the file is empty, run `powershell.exe -Sta -File .\Install-MyPC.Gui.ps1` from a console to see the error. |
 | Window opens behind other windows | Approve the UAC prompt first: the elevated window cannot take focus while UAC is waiting. Click the taskbar entry if needed. |
 | GUI install does nothing | Check the **Log** tab: a task that never starts usually means a missing `Setup.Core.psm1` next to `Install-MyPC.Gui.ps1`. |
+| **Open console** reports a missing file | Keep `Install-MyPC.ps1` next to `Install-MyPC.Gui.ps1`. Re-extract the kit, or use `Run-Setup.bat console` from the full folder. |
 
 Logs are in `Logs\setup-YYYYMMDD-HHMMSS.log` for the console and `Logs\gui-YYYYMMDD-HHMMSS.log` for the window.
 

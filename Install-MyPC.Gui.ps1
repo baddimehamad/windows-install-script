@@ -11,6 +11,9 @@
     the window never freezes. Long installs stream their log into the Log tab
     and into Logs\gui-YYYYMMDD-HHMMSS.log.
 
+    The header's "Open console" button closes the window and starts the text
+    front-end (Install-MyPC.ps1) in a new, already elevated PowerShell window.
+
 .PARAMETER OriginalUserSid
     SID of the user who started the process, preserved across the UAC prompt
     so "rename signed-in user" targets the right account.
@@ -51,6 +54,7 @@ if ([string]::IsNullOrWhiteSpace($script:ScriptPath)) { $script:ScriptPath = $My
 if ([string]::IsNullOrWhiteSpace($OriginalUserSid)) {
     try { $OriginalUserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value } catch { }
 }
+$script:OriginalUserSid = $OriginalUserSid
 
 function Get-RelaunchArguments {
     $parts = @('-NoProfile', '-Sta', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"{0}"' -f $script:ScriptPath))
@@ -104,6 +108,9 @@ $script:StringTable = @{
     'App.Subtitle'              = @{ en = "Windows 10 / 11 setup - no installation required"; fr = "Installation Windows 10 / 11 - aucune installation requise" }
     'App.HeaderSubtitle'        = @{ en = "Windows 10 / 11 setup - no installation required  |  Logs: {0}"; fr = "Installation Windows 10 / 11 - aucune installation requise  |  Journaux : {0}" }
     'App.ElevationRequired'     = @{ en = "Administrator permission is required.`r`n`r`nThe UAC prompt was cancelled, so the setup window cannot start."; fr = "Les droits administrateur sont necessaires.`r`n`r`nLa demande UAC a ete annulee : la fenetre d'installation ne peut pas demarrer." }
+    'App.ConsoleMode'           = @{ en = "Open console"; fr = "Ouvrir la console" }
+    'App.ConsoleModeHint'       = @{ en = "Open the text menu in a new PowerShell window. This window will close."; fr = "Ouvrir le menu texte dans une nouvelle fenetre PowerShell. Cette fenetre va se fermer." }
+    'App.ConsoleMissing'        = @{ en = "Install-MyPC.ps1 was not found next to this window, so the console menu cannot start."; fr = "Install-MyPC.ps1 est introuvable a cote de cette fenetre : le menu texte ne peut pas demarrer." }
 
     'Nav.Software'              = @{ en = "Software"; fr = "Logiciels" }
     'Nav.Printers'              = @{ en = "Printers"; fr = "Imprimantes" }
@@ -433,6 +440,37 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
+    <Style x:Key="HeaderButton" TargetType="Button">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#CFE6FF"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="BorderBrush" Value="#2E628C"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#1D4D74"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#173F60"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="#274B68"/>
+                <Setter Property="Foreground" Value="#6E8CA5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style x:Key="NavButton" TargetType="RadioButton">
       <Setter Property="Foreground" Value="#3A4650"/>
       <Setter Property="FontSize" Value="13"/>
@@ -481,13 +519,17 @@ $xaml = @'
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <StackPanel Grid.Column="0" Margin="0,0,16,0">
           <TextBlock Text="@@App.Title@@" Foreground="#FFFFFF" FontSize="20" FontWeight="SemiBold"/>
           <TextBlock x:Name="HeaderSubtitle" Foreground="#A9C3DA" FontSize="12" Margin="0,3,0,0"
                      TextTrimming="CharacterEllipsis"/>
         </StackPanel>
-        <Border Grid.Column="1" VerticalAlignment="Center" Background="#1D4D74" CornerRadius="12" Padding="12,5">
+        <Button x:Name="ConsoleModeButton" Grid.Column="1" Content="@@App.ConsoleMode@@"
+                Style="{StaticResource HeaderButton}" ToolTip="@@App.ConsoleModeHint@@"
+                VerticalAlignment="Center" Margin="0,0,10,0"/>
+        <Border Grid.Column="2" VerticalAlignment="Center" Background="#1D4D74" CornerRadius="12" Padding="12,5">
           <TextBlock x:Name="ElevationBadge" Text="@@App.Elevated@@" Foreground="#CFE6FF" FontSize="11.5"/>
         </Border>
       </Grid>
@@ -739,6 +781,7 @@ function Get-Control {
 }
 
 $script:HeaderSubtitle = Get-Control 'HeaderSubtitle'
+$script:ConsoleModeButton = Get-Control 'ConsoleModeButton'
 $script:ElevationBadge = Get-Control 'ElevationBadge'
 $script:NavSoftware = Get-Control 'NavSoftware'
 $script:NavPrinters = Get-Control 'NavPrinters'
@@ -2066,6 +2109,7 @@ function Show-PasswordDialog {
 # --------------------------------------------------------------------------
 
 $script:ActionButtons = @(
+    $script:ConsoleModeButton,
     $script:SoftwareInstallButton,
     $script:PrinterInstallButton,
     $script:PrinterRefreshButton,
@@ -2097,6 +2141,32 @@ $script:PrinterRefreshButton.Add_Click({ Refresh-Printers })
 $script:UserRefreshButton.Add_Click({ Refresh-Users })
 $script:AdminEnableButton.Add_Click({ Invoke-AdminEnable })
 $script:RenameApplyButton.Add_Click({ Invoke-RenameCurrentUser })
+
+$script:ConsoleModeButton.Add_Click({
+    if ($script:Busy) {
+        Show-Message (Get-UiText 'Common.TaskRunning') (Get-UiText 'App.ConsoleMode') 'Warning'
+        return
+    }
+    $consolePath = Join-Path $script:Root 'Install-MyPC.ps1'
+    if (-not (Test-Path -LiteralPath $consolePath -PathType Leaf)) {
+        Show-Message (Get-UiText 'App.ConsoleMissing') (Get-UiText 'App.ConsoleMode') 'Warning'
+        return
+    }
+    $arguments = @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-WindowStyle', 'Normal',
+        '-File', ('"{0}"' -f $consolePath)
+    )
+    if (-not [string]::IsNullOrWhiteSpace($script:OriginalUserSid)) {
+        $arguments += @('-OriginalUserSid', ('"{0}"' -f $script:OriginalUserSid))
+    }
+    try {
+        Start-Process -FilePath 'powershell.exe' -ArgumentList ($arguments -join ' ') -WorkingDirectory $script:Root | Out-Null
+        Add-LogLine -Level Info -Message 'Console front-end opened in a new PowerShell window; closing the graphical window.'
+        $script:Window.Close()
+    } catch {
+        Show-Message $_.Exception.Message (Get-UiText 'Common.Error') 'Error'
+    }
+})
 
 $script:LogCopyButton.Add_Click({
     try {
