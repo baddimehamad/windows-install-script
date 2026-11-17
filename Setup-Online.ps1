@@ -5,12 +5,13 @@
 
 .DESCRIPTION
     Downloads only the files needed to run (Install-MyPC.Gui.ps1,
-    Install-MyPC.ps1, Setup.Core.psm1 and Software.json) into a shared folder,
-    then runs Install-MyPC.Gui.ps1 (window) or Install-MyPC.ps1 (text menu)
-    from disk. Running from disk is required because the scripts use their own
-    file location for elevation, Software.json lookup, and logging.
+    Install-MyPC.ps1, Setup.Core.psm1, Software.json and the application
+    logos used by the window) into a shared folder, then runs
+    Install-MyPC.Gui.ps1 (window) or Install-MyPC.ps1 (text menu) from disk.
+    Running from disk is required because the scripts use their own file
+    location for elevation, Software.json lookup, and logging.
 
-    Only ~140 KB is downloaded. The full repo ZIP is NOT used, because it
+    Only ~350 KB is downloaded. The full repo ZIP is NOT used, because it
     contains ~100 MB of printer drivers (Drivers/) that would make every
     first launch slow.
 
@@ -117,6 +118,27 @@ function Get-FastWebFile {
     }
 }
 
+function Get-CatalogLogoFiles {
+    param([Parameter(Mandatory = $true)][string]$ConfigPath)
+    # Returns the unique file names used by the catalog's "Logo" fields.
+    # Only the leaf name is kept: logos always live in the logo folder.
+    $names = [System.Collections.Generic.List[string]]::new()
+    try {
+        $config = Get-Content -LiteralPath $ConfigPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        return $names
+    }
+    foreach ($entry in (@($config.Apps) + @($config.LocalInstallers))) {
+        if ($null -eq $entry) { continue }
+        $logo = [string]$entry.Logo
+        if ([string]::IsNullOrWhiteSpace($logo)) { continue }
+        $leaf = [System.IO.Path]::GetFileName($logo)
+        if ([string]::IsNullOrWhiteSpace($leaf)) { continue }
+        if (-not ($names -contains $leaf)) { [void]$names.Add($leaf) }
+    }
+    return $names
+}
+
 try {
     $BaseDir = Get-StagingBase
     $WorkDir = Join-Path $BaseDir 'src'
@@ -154,6 +176,23 @@ try {
         $guiInfo = Get-Item -LiteralPath $scriptPath
         if ($guiInfo.Length -lt 4096) {
             throw "Downloaded Install-MyPC.Gui.ps1 looks wrong (only $($guiInfo.Length) bytes)."
+        }
+
+        # Logos are cosmetic: a failed download must never block the window.
+        $logoNames = @(Get-CatalogLogoFiles -ConfigPath $configPath)
+        if ($logoNames.Count -gt 0) {
+            $logoDir = Join-Path $WorkDir 'logo'
+            New-Item -ItemType Directory -Path $logoDir -Force -ErrorAction Stop | Out-Null
+            Write-Host "Downloading $($logoNames.Count) application logo(s) ..." -ForegroundColor Cyan
+            foreach ($logoName in $logoNames) {
+                $logoUrl = "$BaseUrl/logo/$([uri]::EscapeDataString($logoName))"
+                $logoPath = Join-Path $logoDir $logoName
+                try {
+                    Get-FastWebFile -Uri $logoUrl -OutFile $logoPath
+                } catch {
+                    Write-Host "Logo $logoName unavailable; the window will show an initial tile instead." -ForegroundColor DarkYellow
+                }
+            }
         }
     }
 

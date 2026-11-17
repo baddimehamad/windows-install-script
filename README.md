@@ -38,7 +38,7 @@ The window has five tabs:
 
 | Tab | What you can do |
 |-----|-----------------|
-| **Software** | Filter the list, tick applications, then **Install selected**. Each row shows `Ready`, `Will download`, `File missing`, `Installing...`, `Installed`, `Installed (restart)`, `Skipped` or `Failed`. |
+| **Software** | Filter the list, tick applications, then **Install selected**. Each row shows the application logo, a `WINGET`/`LOCAL` badge and a status: `Ready`, `Will download`, `File missing`, `Installing...`, `Installed`, `Installed (restart)`, `Skipped` or `Failed`. |
 | **Printers** | Pick a manufacturer, type the IP/hostname, port and optional name, then **Install printer**. The right-hand list shows installed printers and lets you rename one. |
 | **Users** | Rename a local account, change its password, or add/remove group membership. The only enabled administrator is marked `LAST ADMIN - LOCKED` and cannot be changed. |
 | **Account** | Enable the built-in Administrator (password typed twice, never stored), or rename the account you are signed in with. |
@@ -51,6 +51,7 @@ Notes:
 - **Same elevation.** The window relaunches itself with UAC on start, and still passes the original user's SID, so "rename signed-in user" targets the right account.
 - **The window never freezes.** Installs run in a background runspace; a **Cancel** button appears in the status bar while something is running.
 - **Logs:** `Logs\gui-YYYYMMDD-HHMMSS.log`, one per window session.
+- **Logos:** each software row shows the image named by its `Logo` field in `Software.json` (for example `logo/chrome.png`). The files live in the `logo` folder. If an image is missing or unreadable, the row shows a colored tile with the application's first letter instead, so a bad logo never blocks an install.
 - The GUI does **not** write `Software.json` — it is read-only. Edit the file by hand to change the catalog.
 - Closing the window during an install asks for confirmation; a child installer (winget, msiexec) may keep running in the background.
 
@@ -137,7 +138,7 @@ Want your own memorable word? Paste the full URL into https://tinyurl.com and cr
 
 </details>
 
-This downloads 4 small files (`Install-MyPC.Gui.ps1`, `Install-MyPC.ps1`, `Setup.Core.psm1` + `Software.json`, ~140 KB) to a staging folder and opens the window by default. Add `-Console` (or set `$env:SETUP_GUI=0`) to use the text menu instead. Approve the UAC prompt when it appears.
+This downloads the two front-ends, the shared module, `Software.json` and the application logos from `logo/` (about 350 KB), then opens the window by default. Add `-Console` (or set `$env:SETUP_GUI=0`) to use the text menu instead; console mode does not download logos. Approve the UAC prompt when it appears.
 
 > Note: local-only files are not downloaded up front: `OfficeSetup.exe` and `Installers/` content show `FILE NOT FOUND` unless they carry a `Url` (downloaded on demand, e.g. French Office, Chrome fallback) or you copy them in manually. Printer driver folders (`Drivers/`) **are fetched automatically on demand** into `C:\ProgramData\Windows_Auto_Setup_Online\Drivers` the first time you install a printer (cached for later runs). Winget apps work normally.
 
@@ -179,6 +180,8 @@ windows-install-script/
 ├── Setup.Core.psm1    ← shared logic used by both front-ends
 ├── Setup-Online.ps1   ← web launcher for `irm ... | iex`
 ├── Software.json      ← edit this to add/remove apps
+├── logo/              ← one PNG per application (shown in the window)
+│   └── README.md      ← sources, format and trademark note
 ├── Installers/        ← optional folder for your own .exe / .msi files
 │   └── README.txt
 ├── Drivers/           ← printer driver folders (konika_minolta, xerox, epson)
@@ -192,6 +195,7 @@ windows-install-script/
 - **`Install-MyPC.Gui.ps1`** — window front-end (WPF, embedded XAML).
 - **`Setup.Core.psm1`** — every action (Winget, local installers, printers, users, Administrator). Both front-ends call it, so a fix applies to both. It never prompts and never writes to the console.
 - **`Software.json`** — the only file you normally need to edit.
+- **`logo/`** — application icons for the window (PNG). See `logo/README.md` for sources and reuse notes.
 
 ---
 
@@ -225,6 +229,28 @@ Add an object to the `Apps` array:
   }
   ```
 - Keep valid JSON: double quotes, commas between objects.
+
+### Add an application logo
+
+The window front-end shows a small logo next to every enabled `Apps` and
+`LocalInstallers` entry. Point the entry at a PNG in the `logo` folder:
+
+```json
+{
+  "Name": "Example Application",
+  "Type": "winget",
+  "Id": "Publisher.PackageId",
+  "Logo": "logo/example-application.png",
+  "Enabled": true
+}
+```
+
+- Use a square PNG (the bundled files are 128 x 128) with a transparent background. The window draws it at 28 x 28.
+- `Logo` may be relative to the script folder (as above) or an absolute path.
+- If `Logo` is missing, the file is absent, or the image cannot be read, the row shows a colored tile with the application's first letter. Nothing fails.
+- The console front-end ignores logos.
+- In online mode, `Setup-Online.ps1` downloads only the files referenced by the catalog, best-effort. Add a new logo to the repo before referencing it there.
+- See [`logo/README.md`](logo/README.md) for the bundled icons, their sources and the trademark note.
 
 ### Add your own `.exe` / `.msi` installer
 
@@ -348,6 +374,7 @@ Safety: if only one enabled administrator is left on the PC, its group membershi
 | App shows wrong version / fails | Verify the Winget ID with `winget search <name>` and update `Software.json`. Vendors rename IDs sometimes. |
 | `Software.json could not be parsed` | You broke the JSON (missing comma/quote). Validate it at https://jsonlint.com |
 | Local installer `FILE NOT FOUND` | Check the `Path` in `Software.json` — relative to the script folder. |
+| Logo missing / letter tile shown | Check the `Logo` path in `Software.json` (relative to the scripts) and that the file is a PNG the window can read. Online mode downloads logos best-effort; a failed download falls back to the initial tile and does not block the install. |
 | Nothing happens after double-click | Right-click `Run-Setup.bat` → **Run as administrator**, and approve UAC. Check `Logs\gui-*.log`. For the text menu, run `Run-Setup.bat console` in a Command Prompt. |
 | `Failed when opening sources` / exit `1978335217` | Corrupt Winget source DB (the script now auto-resets once). Manual fix: `winget source reset --force`, then `winget source update`, then rerun. Update App Installer: https://aka.ms/getwinget. If logged in as built-in Administrator, try a regular admin account instead. |
 | Installer hash mismatch (can't override as admin) | Stale Winget manifest. The script now falls back to the vendor's direct download when `FallbackUrl` is set (Chrome included). Or wait a day and rerun after `winget source update`. |

@@ -14,6 +14,10 @@
     The header's "Open console" button closes the window and starts the text
     front-end (Install-MyPC.ps1) in a new, already elevated PowerShell window.
 
+    Software rows show the image named by each entry's "Logo" field in
+    Software.json. Images live in the logo folder; a colored initial is used
+    when the file is missing.
+
 .PARAMETER OriginalUserSid
     SID of the user who started the process, preserved across the UAC prompt
     so "rename signed-in user" targets the right account.
@@ -835,6 +839,7 @@ $script:LogDocument = $script:LogView.Document
 
 $script:Brushes = @{}
 $script:LevelBrushes = @{}
+$script:LogoCache = @{}
 $script:SoftwareRows = @()
 $script:PrinterRows = @()
 $script:UserRows = @()
@@ -1146,6 +1151,78 @@ function Set-SoftwareState {
     $Row.Status.Foreground = Get-Brush $map[$Tone]
 }
 
+function Get-SoftwareLogoPath {
+    param($Item)
+    if ($null -eq $Item -or $null -eq $Item.Item) { return '' }
+    $property = $Item.Item.PSObject.Properties['Logo']
+    if ($null -eq $property) { return '' }
+    $logo = [string]$property.Value
+    if ([string]::IsNullOrWhiteSpace($logo)) { return '' }
+    if ([System.IO.Path]::IsPathRooted($logo)) { return $logo }
+    return (Join-Path $script:Root $logo)
+}
+
+function Get-LogoImage {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
+    if ($script:LogoCache.ContainsKey($Path)) { return $script:LogoCache[$Path] }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    try {
+        $bitmap = [System.Windows.Media.Imaging.BitmapImage]::new()
+        $bitmap.BeginInit()
+        $bitmap.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
+        $bitmap.DecodePixelWidth = 64
+        $bitmap.UriSource = [Uri]::new($Path, [UriKind]::Absolute)
+        $bitmap.EndInit()
+        $bitmap.Freeze()
+        $script:LogoCache[$Path] = $bitmap
+        return $bitmap
+    } catch {
+        Add-LogLine -Level Warning -Message ("Could not load logo '{0}': {1}" -f $Path, $_.Exception.Message)
+        return $null
+    }
+}
+
+function Get-LogoFallbackBrush {
+    param([string]$Name)
+    $palette = @('#0F6CBD', '#107C10', '#9A6100', '#C42B1C', '#4B3A82', '#0B6A6A', '#7A3E9D', '#5F6B76')
+    $hash = 0
+    foreach ($ch in ([string]$Name).ToCharArray()) {
+        $hash = (($hash * 31) + [int]$ch) -band 0x7FFFFFFF
+    }
+    return Get-Brush $palette[$hash % $palette.Count]
+}
+
+function New-SoftwareLogo {
+    param($Item)
+    $logoPath = Get-SoftwareLogoPath -Item $Item
+    $source = Get-LogoImage -Path $logoPath
+    if ($null -ne $source) {
+        $image = [System.Windows.Controls.Image]::new()
+        $image.Source = $source
+        $image.Width = 28
+        $image.Height = 28
+        $image.Stretch = [System.Windows.Media.Stretch]::Uniform
+        $image.SnapsToDevicePixels = $true
+        return $image
+    }
+
+    $letter = '?'
+    if (-not [string]::IsNullOrWhiteSpace([string]$Item.Name)) {
+        $letter = ([string]$Item.Name).Substring(0, 1).ToUpperInvariant()
+    }
+    $tile = [System.Windows.Controls.Border]::new()
+    $tile.Width = 28
+    $tile.Height = 28
+    $tile.CornerRadius = [System.Windows.CornerRadius]::new(6)
+    $tile.Background = Get-LogoFallbackBrush -Name ([string]$Item.Name)
+    $text = New-UiText -Text $letter -Size 13 -Weight SemiBold -Color '#FFFFFF'
+    $text.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Center
+    $text.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+    $tile.Child = $text
+    return $tile
+}
+
 function New-SoftwareRow {
     param($Item, [string]$StatusText, [string]$StatusTone)
 
@@ -1155,13 +1232,19 @@ function New-SoftwareRow {
     $container.BorderThickness = [System.Windows.Thickness]::new(0, 0, 0, 1)
     $container.Padding = [System.Windows.Thickness]::new(12, 9, 12, 9)
 
-    $grid = New-UiGrid -Columns @('32', '*', '80', '120')
+    $grid = New-UiGrid -Columns @('32', '40', '*', '80', '120')
 
     $checkBox = [System.Windows.Controls.CheckBox]::new()
     $checkBox.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
     $checkBox.IsChecked = $false
     [System.Windows.Controls.Grid]::SetColumn($checkBox, 0)
     [void]$grid.Children.Add($checkBox)
+
+    $logo = New-SoftwareLogo -Item $Item
+    $logo.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+    $logo.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Center
+    [System.Windows.Controls.Grid]::SetColumn($logo, 1)
+    [void]$grid.Children.Add($logo)
 
     $textStack = [System.Windows.Controls.StackPanel]::new()
     $name = New-UiText -Text $Item.Name -Weight SemiBold
@@ -1170,7 +1253,7 @@ function New-SoftwareRow {
     $detail.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
     [void]$textStack.Children.Add($name)
     [void]$textStack.Children.Add($detail)
-    [System.Windows.Controls.Grid]::SetColumn($textStack, 1)
+    [System.Windows.Controls.Grid]::SetColumn($textStack, 2)
     [void]$grid.Children.Add($textStack)
 
     $badge = [System.Windows.Controls.Border]::new()
@@ -1186,13 +1269,13 @@ function New-SoftwareRow {
         $badgeText = New-UiText -Text 'LOCAL' -Size 10 -Weight SemiBold -Color '#4B3A82'
     }
     $badge.Child = $badgeText
-    [System.Windows.Controls.Grid]::SetColumn($badge, 2)
+    [System.Windows.Controls.Grid]::SetColumn($badge, 3)
     [void]$grid.Children.Add($badge)
 
     $status = New-UiText -Text $StatusText -Size 11.5 -Color '#5F6B76'
     $status.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Right
     $status.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-    [System.Windows.Controls.Grid]::SetColumn($status, 3)
+    [System.Windows.Controls.Grid]::SetColumn($status, 4)
     [void]$grid.Children.Add($status)
 
     $container.Child = $grid
@@ -2251,6 +2334,12 @@ Refresh-Account
 
 Add-LogLine -Level Info -Message 'Windows Automatic Setup started.'
 Add-LogLine -Level Detail -Message ("Root: {0}" -f $script:Root)
+$logoDirectory = Join-Path $script:Root 'logo'
+$logoCount = 0
+if (Test-Path -LiteralPath $logoDirectory -PathType Container) {
+    $logoCount = @(Get-ChildItem -LiteralPath $logoDirectory -Filter *.png -File -ErrorAction SilentlyContinue).Count
+}
+Add-LogLine -Level Detail -Message ("Logos: {0} image(s) in {1}" -f $logoCount, $logoDirectory)
 Add-LogLine -Level Detail -Message ("PowerShell {0} | {1} | Admin: {2}" -f $PSVersionTable.PSVersion, [Environment]::OSVersion.VersionString, $isAdmin)
 Add-LogLine -Level Detail -Message ("Log file: {0}" -f $script:LogFile)
 
