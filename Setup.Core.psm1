@@ -531,6 +531,455 @@ function Install-SetupLocalPackage {
 }
 
 # --------------------------------------------------------------------------
+# Software inventory, update and removal
+# --------------------------------------------------------------------------
+
+function Get-SetupUninstallRegistryEntries {
+    <#
+    .SYNOPSIS
+        Reads Add/Remove Programs entries from the 64-bit, 32-bit and per-user
+        hives.
+    #>
+    $paths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    $entries = [System.Collections.Generic.List[object]]::new()
+    foreach ($path in $paths) {
+        foreach ($entry in @(Get-ItemProperty -Path $path -ErrorAction SilentlyContinue)) {
+            if ($null -eq $entry) { continue }
+            $displayName = [string]$entry.DisplayName
+            if ([string]::IsNullOrWhiteSpace($displayName)) { continue }
+            if ($entry.SystemComponent -eq 1) { continue }
+            $releaseType = [string]$entry.ReleaseType
+            if ($releaseType -match '(?i)^(Update|Hotfix|Security Update)$') { continue }
+            if ($displayName -match '(?i)^(Update for|Security Update for|Hotfix for)') { continue }
+            [void]$entries.Add([pscustomobject]@{
+                DisplayName          = $displayName.Trim()
+                DisplayVersion       = ([string]$entry.DisplayVersion).Trim()
+                Publisher            = ([string]$entry.Publisher).Trim()
+                UninstallString      = ([string]$entry.UninstallString).Trim()
+                QuietUninstallString = ([string]$entry.QuietUninstallString).Trim()
+                InstallLocation      = ([string]$entry.InstallLocation).Trim()
+                KeyName              = [string]$entry.PSChildName
+            })
+        }
+    }
+    return $entries.ToArray()
+}
+
+function Find-SetupRegistryEntry {
+    <#
+    .SYNOPSIS
+        Finds the Add/Remove Programs entry that matches a catalog item.
+    .DESCRIPTION
+        Uses the optional MatchName field first, then the display name. An
+        exact name wins, then a prefix, then a word-boundary substring. A
+        leading "Microsoft " prefix is ignored on both sides so entries such
+        as "Microsoft Visual Studio Code (User)" match "Visual Studio Code".
+    #>
+    param($Entries, $Item)
+
+    $matchNames = @()
+    if ($null -ne $Item.Item) {
+        $property = $Item.Item.PSObject.Properties['MatchName']
+        if ($null -ne $property) {
+            $value = [string]$property.Value
+            if (-not [string]::IsNullOrWhiteSpace($value)) {
+                $matchNames = @($value -split '\s*[;|]\s*' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            }
+        }
+    }
+    if ($matchNames.Count -eq 0) { $matchNames = @([string]$Item.Name) }
+
+    $best = $null
+    $bestScore = 0
+    foreach ($entry in @($Entries)) {
+        $displayName = [string]$entry.DisplayName
+        if ([string]::IsNullOrWhiteSpace($displayName)) { continue }
+        $displayVariants = @($displayName)
+        $displayStripped = $displayName -replace '(?i)^Microsoft\s+', ''
+        if ($displayStripped -ne $displayName) { $displayVariants += $displayStripped }
+
+        foreach ($matchName in $matchNames) {
+            $nameVariants = @($matchName)
+            $nameStripped = $matchName -replace '(?i)^Microsoft\s+', ''
+            if ($nameStripped -ne $matchName) { $nameVariants += $nameStripped }
+
+            foreach ($variant in $displayVariants) {
+                foreach ($candidate in $nameVariants) {
+                    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+                    $score = 0
+                    if ($variant.Equals($candidate, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $score = 100
+                    } elseif ($variant.StartsWith($candidate, [System.StringComparison]::OrdinalIgnoreCase) -and
+                        ($variant.Length -eq $candidate.Length -or -not [char]::IsLetterOrDigit($variant[$candidate.Length]))) {
+                        # A prefix only counts when the next character is a
+                        # separator: "Office 2024 - fr-fr" matches "Office 2024",
+                        # but "GitHub CLI" must not match "Git".
+                        $score = 80
+                    } elseif ($variant -match ('(?i)(^|[^A-Za-z0-9])' + [regex]::Escape($candidate) + '([^A-Za-z0-9]|$)')) {
+                        $score = 60
+                    }
+                    if ($score -gt $bestScore) {
+                        $bestScore = $score
+                        $best = $entry
+                    }
+                }
+            }
+        }
+    }
+    return $best
+}
+
+function ConvertFrom-SetupWingetList {
+    <#
+    .SYNOPSIS
+        Parses the table printed by "winget list" for the requested IDs.
+    .DESCRIPTION
+        Winget has no JSON output for "list". Column headers are localized and
+        can shift, so each matching data line is read from the right: the last
+        token is the source, then the available version (when present), then
+        the installed version.
+    #>
+    param(
+        [AllowEmptyString()][string]$Text,
+        [string[]]$Ids = @()
+    )
+
+    $rows = @{}
+    $wanted = @($Ids | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+    if ($wanted.Count -eq 0) { return $rows }
+
+    $idPattern = '(?i)(?<![^\s])(' + (($wanted | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')(?=\s|$)'
+    foreach ($rawLine in ($Text -split "\r?\n")) {
+        $line = ($rawLine -replace "\x1B\[[0-9;]*[A-Za-z]", '').Trim()
+        if ($line.Length -eq 0) { continue }
+        $idMatches = [regex]::Matches($line, $idPattern)
+        if ($idMatches.Count -eq 0) { continue }
+        $idMatch = $idMatches[$idMatches.Count - 1]
+        $id = [string]$idMatch.Groups[1].Value
+        $rest = $line.Substring($idMatch.Index + $idMatch.Length).Trim()
+        if ($rest.Length -eq 0) { continue }
+
+        $tokens = @($rest -split '\s+' | Where-Object { $_ -ne '' })
+        if ($tokens.Count -eq 0) { continue }
+        $source = ''
+        $last = [string]$tokens[$tokens.Count - 1]
+        if ($last -eq 'winget' -or $last -eq 'msstore') {
+            $source = $last
+            if ($tokens.Count -eq 1) { continue }
+            $tokens = @($tokens[0..($tokens.Count - 2)])
+        }
+        if ($tokens.Count -eq 0) { continue }
+
+        $version = ''
+        $available = ''
+        if ($tokens.Count -ge 3) {
+            # Some winget builds add an extra token before the version; the
+            # last two values are still installed version and update version.
+            $version = [string]$tokens[$tokens.Count - 2]
+            $available = [string]$tokens[$tokens.Count - 1]
+        } elseif ($tokens.Count -eq 2) {
+            $version = [string]$tokens[0]
+            $available = [string]$tokens[1]
+        } else {
+            $version = [string]$tokens[0]
+        }
+
+        $key = $id.ToLowerInvariant()
+        if (-not $rows.ContainsKey($key) -or ([string]::IsNullOrWhiteSpace([string]$rows[$key].Version) -and -not [string]::IsNullOrWhiteSpace($version))) {
+            $rows[$key] = [pscustomobject]@{
+                Id        = $id
+                Version   = $version
+                Available = $available
+                Source    = $source
+                Line      = $line
+            }
+        }
+    }
+    return $rows
+}
+
+function Invoke-SetupUninstallCommand {
+    <#
+    .SYNOPSIS
+        Runs an uninstall command taken from the Add/Remove Programs registry.
+    #>
+    param([Parameter(Mandatory = $true)][string]$CommandLine)
+
+    $command = ($CommandLine -replace '\r?\n', ' ').Trim()
+    if ($command -match '(?i)^\s*"?MsiExec(?:\.exe)?"?\s+/([IX])\s*(\{[0-9A-Fa-f\-]+\})') {
+        $productCode = $matches[2]
+        $process = Start-Process -FilePath (Join-Path $env:WINDIR 'System32\msiexec.exe') `
+            -ArgumentList (@('/x', $productCode, '/qn', '/norestart') -join ' ') `
+            -Wait -PassThru -ErrorAction Stop
+        return $process.ExitCode
+    }
+
+    $process = Start-Process -FilePath (Join-Path $env:WINDIR 'System32\cmd.exe') `
+        -ArgumentList @('/c', $command) -Wait -PassThru -WindowStyle Hidden -ErrorAction Stop
+    return $process.ExitCode
+}
+
+function Get-SetupInstalledSoftware {
+    <#
+    .SYNOPSIS
+        Checks every enabled catalog entry for its installed version and any
+        available winget update.
+    .DESCRIPTION
+        Installed versions come from the Windows uninstall registry and, for
+        winget-managed packages, from "winget list". Update information is only
+        reported when winget recognises the catalog ID, so the GUI never offers
+        an update it cannot actually perform.
+    #>
+    param([Parameter(Mandatory = $true)]$Config)
+
+    $catalog = @(Get-SoftwareCatalog -Config $Config)
+    $registryEntries = @(Get-SetupUninstallRegistryEntries)
+    $wingetRows = @{}
+    $winget = Get-WingetCommand
+    $wingetAvailable = ($null -ne $winget)
+
+    Write-SetupLog -Level Task -Message 'Checking installed software versions and updates ...'
+    if ($wingetAvailable) {
+        try {
+            $output = & $winget.Source list --accept-source-agreements --disable-interactivity 2>&1 | Out-String
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -ne 0) {
+                Write-SetupLog -Level Warning -Message ("winget list returned exit code {0}; some versions may be missing." -f $exitCode)
+            }
+            $wingetIds = @($catalog | Where-Object { $_.Kind -eq 'winget' } | ForEach-Object { [string]$_.Id })
+            $wingetRows = ConvertFrom-SetupWingetList -Text $output -Ids $wingetIds
+        } catch {
+            Write-SetupLog -Level Warning -Message ("Could not query winget: {0}" -f $_.Exception.Message)
+        }
+    } else {
+        Write-SetupLog -Level Warning -Message 'winget is not available; only the Windows uninstall registry will be checked.'
+    }
+
+    $packages = [System.Collections.Generic.List[object]]::new()
+    $installedCount = 0
+    $updateCount = 0
+
+    foreach ($item in $catalog) {
+        $registryEntry = $null
+        if ($registryEntries.Count -gt 0) {
+            $registryEntry = Find-SetupRegistryEntry -Entries $registryEntries -Item $item
+        }
+        $wingetRow = $null
+        if ($item.Kind -eq 'winget') {
+            $key = ([string]$item.Id).ToLowerInvariant()
+            if ($wingetRows.ContainsKey($key)) { $wingetRow = $wingetRows[$key] }
+        }
+
+        $installed = ($null -ne $registryEntry) -or ($null -ne $wingetRow)
+        $version = ''
+        if ($null -ne $registryEntry) { $version = [string]$registryEntry.DisplayVersion }
+        if ([string]::IsNullOrWhiteSpace($version) -and $null -ne $wingetRow) {
+            $version = [string]$wingetRow.Version
+        }
+
+        $available = ''
+        $updateKnown = $false
+        $updateSource = ''
+        if ($null -ne $wingetRow) {
+            $available = [string]$wingetRow.Available
+            $updateSource = [string]$wingetRow.Source
+            # "winget list" also reports Microsoft Store packages. Updates are
+            # only offered for the winget source because the update command is
+            # pinned to it.
+            $updateKnown = ($updateSource -eq 'winget')
+        }
+        $updateAvailable = $updateKnown -and (-not [string]::IsNullOrWhiteSpace($available)) -and ($available -ne $version)
+
+        $hasRegistryUninstall = ($null -ne $registryEntry) -and (
+            (-not [string]::IsNullOrWhiteSpace($registryEntry.UninstallString)) -or
+            (-not [string]::IsNullOrWhiteSpace($registryEntry.QuietUninstallString))
+        )
+        $wingetManaged = ($item.Kind -eq 'winget') -and ($null -ne $wingetRow)
+        $uninstallable = $hasRegistryUninstall -or $wingetManaged
+
+        $source = ''
+        if ($null -ne $registryEntry) { $source = 'registry' }
+        elseif ($null -ne $wingetRow) { $source = 'winget' }
+
+        if ($installed) { $installedCount++ }
+        if ($updateAvailable) { $updateCount++ }
+
+        [void]$packages.Add([pscustomobject]@{
+            Name            = [string]$item.Name
+            Kind            = [string]$item.Kind
+            Id              = [string]$item.Id
+            Installed       = $installed
+            Version         = $version
+            Available       = $available
+            UpdateAvailable = $updateAvailable
+            UpdateKnown     = $updateKnown
+            UpdateSource    = $updateSource
+            WingetManaged   = $wingetManaged
+            Uninstallable   = $uninstallable
+            Source          = $source
+        })
+    }
+
+    $result = New-SetupResult -Name 'Installed software' -Success $true `
+        -Message ("{0} installed, {1} update(s) available." -f $installedCount, $updateCount) `
+        -Data @{
+            Packages        = $packages.ToArray()
+            WingetAvailable = $wingetAvailable
+            InstalledCount  = $installedCount
+            UpdateCount     = $updateCount
+        }
+    Write-SetupLog -Level Success -Message ("Installed software check finished: {0} installed, {1} update(s) available." -f $installedCount, $updateCount)
+    return $result
+}
+
+function Uninstall-SetupSoftware {
+    <#
+    .SYNOPSIS
+        Uninstalls one catalog item through winget or the Windows uninstall
+        registry.
+    .DESCRIPTION
+        Winget is used when it recognises the package. A winget catalog entry
+        that winget does not manage (for example a manually installed Chrome)
+        falls back to its Add/Remove Programs entry.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$CatalogItem,
+        [Nullable[bool]]$WingetManaged = $null
+    )
+
+    $name = [string]$CatalogItem.Name
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = 'Software' }
+
+    $useWinget = ($CatalogItem.Kind -eq 'winget')
+    if ($null -ne $WingetManaged) {
+        $useWinget = $useWinget -and [bool]$WingetManaged
+    } else {
+        $property = $CatalogItem.PSObject.Properties['WingetManaged']
+        if ($null -ne $property) { $useWinget = $useWinget -and [bool]$property.Value }
+    }
+
+    if ($useWinget) {
+        $winget = Get-WingetCommand
+        if ($null -eq $winget) {
+            Write-SetupLog -Level Warning -Message ("Cannot uninstall {0}: winget is not available." -f $name)
+            return New-SetupResult -Name $name -Success $false -Message 'winget is not available.'
+        }
+        Write-SetupLog -Level Task -Message ("Uninstalling {0} ({1})" -f $name, $CatalogItem.Id)
+        $wingetArgs = @(
+            'uninstall', '--id', [string]$CatalogItem.Id, '--exact', '--all',
+            '--silent', '--accept-source-agreements', '--disable-interactivity'
+        )
+        try {
+            $output = & $winget.Source @wingetArgs 2>&1 | Out-String
+            $exitCode = $LASTEXITCODE
+            if (-not [string]::IsNullOrWhiteSpace($output)) {
+                Write-SetupLog -Level Detail -Message $output.TrimEnd()
+            }
+            if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq 1641) {
+                Write-SetupLog -Level Success -Message ("Uninstalled: {0}" -f $name)
+                return New-SetupResult -Name $name -Success $true -ExitCode $exitCode `
+                    -RestartRequired ($exitCode -in @(3010, 1641)) -Message 'Uninstalled.'
+            }
+            Write-SetupLog -Level Warning -Message ("Uninstall returned exit code {0}: {1}" -f $exitCode, $name)
+            return New-SetupResult -Name $name -Success $false -ExitCode $exitCode `
+                -Message ("Uninstall returned exit code {0}." -f $exitCode)
+        } catch {
+            Write-SetupLog -Level Error -Message ("Could not uninstall {0}: {1}" -f $name, $_.Exception.Message)
+            return New-SetupResult -Name $name -Success $false -Message 'Could not launch the uninstaller.'
+        }
+    }
+
+    $entries = @(Get-SetupUninstallRegistryEntries)
+    $entry = Find-SetupRegistryEntry -Entries $entries -Item $CatalogItem
+    if ($null -eq $entry) {
+        Write-SetupLog -Level Warning -Message ("No uninstall entry was found for {0}." -f $name)
+        return New-SetupResult -Name $name -Success $false `
+            -Message 'No Add/Remove Programs entry matched this application.'
+    }
+
+    $command = [string]$entry.QuietUninstallString
+    if ([string]::IsNullOrWhiteSpace($command)) { $command = [string]$entry.UninstallString }
+    if ([string]::IsNullOrWhiteSpace($command)) {
+        Write-SetupLog -Level Warning -Message ("No uninstall command is registered for {0}." -f $name)
+        return New-SetupResult -Name $name -Success $false -Message 'No uninstall command is registered.'
+    }
+
+    Write-SetupLog -Level Task -Message ("Uninstalling {0} ({1})" -f $name, $entry.DisplayName)
+    Write-SetupLog -Level Detail -Message ("Command: {0}" -f ($command -replace '\s+', ' '))
+    try {
+        $exitCode = Invoke-SetupUninstallCommand -CommandLine $command
+        if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq 1641) {
+            Write-SetupLog -Level Success -Message ("Uninstalled: {0}" -f $name)
+            return New-SetupResult -Name $name -Success $true -ExitCode $exitCode `
+                -RestartRequired ($exitCode -in @(3010, 1641)) -Message 'Uninstalled.'
+        }
+        Write-SetupLog -Level Warning -Message ("Uninstall returned exit code {0}: {1}" -f $exitCode, $name)
+        return New-SetupResult -Name $name -Success $false -ExitCode $exitCode `
+            -Message ("Uninstall returned exit code {0}." -f $exitCode)
+    } catch {
+        Write-SetupLog -Level Error -Message ("Could not uninstall {0}: {1}" -f $name, $_.Exception.Message)
+        return New-SetupResult -Name $name -Success $false -Message 'Could not launch the uninstaller.'
+    }
+}
+
+function Update-SetupSoftware {
+    <#
+    .SYNOPSIS
+        Updates one winget-managed catalog item to the latest available
+        version.
+    #>
+    param([Parameter(Mandatory = $true)]$CatalogItem)
+
+    $name = [string]$CatalogItem.Name
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = 'Software' }
+    if ($CatalogItem.Kind -ne 'winget') {
+        return New-SetupResult -Name $name -Success $true -Skipped $true `
+            -Message 'Local installers are updated by running the installer again.'
+    }
+
+    $winget = Get-WingetCommand
+    if ($null -eq $winget) {
+        Write-SetupLog -Level Warning -Message ("Cannot update {0}: winget is not available." -f $name)
+        return New-SetupResult -Name $name -Success $false -Message 'winget is not available.'
+    }
+
+    Write-SetupLog -Level Task -Message ("Updating {0} ({1})" -f $name, $CatalogItem.Id)
+    $wingetArgs = @(
+        'upgrade', '--id', [string]$CatalogItem.Id, '--exact', '--source', 'winget',
+        '--silent', '--accept-package-agreements', '--accept-source-agreements',
+        '--disable-interactivity'
+    )
+    try {
+        $output = & $winget.Source @wingetArgs 2>&1 | Out-String
+        $exitCode = $LASTEXITCODE
+        if (-not [string]::IsNullOrWhiteSpace($output)) {
+            Write-SetupLog -Level Detail -Message $output.TrimEnd()
+        }
+        if ($exitCode -eq 0 -or $exitCode -eq 3010 -or $exitCode -eq 1641) {
+            Write-SetupLog -Level Success -Message ("Updated: {0}" -f $name)
+            return New-SetupResult -Name $name -Success $true -ExitCode $exitCode `
+                -RestartRequired ($exitCode -in @(3010, 1641)) -Message 'Updated.'
+        }
+        if ($exitCode -eq -1978335189) {
+            Write-SetupLog -Level Info -Message ("No update is available for {0}." -f $name)
+            return New-SetupResult -Name $name -Success $true -Skipped $true -ExitCode $exitCode `
+                -Data @{ NoUpdate = $true } -Message 'No update is available.'
+        }
+        Write-SetupLog -Level Warning -Message ("Update returned exit code {0}: {1}" -f $exitCode, $name)
+        return New-SetupResult -Name $name -Success $false -ExitCode $exitCode `
+            -Message ("Update returned exit code {0}." -f $exitCode)
+    } catch {
+        Write-SetupLog -Level Error -Message ("Could not update {0}: {1}" -f $name, $_.Exception.Message)
+        return New-SetupResult -Name $name -Success $false -Message 'Could not launch the update.'
+    }
+}
+
+# --------------------------------------------------------------------------
 # Built-in Administrator and signed-in account
 # --------------------------------------------------------------------------
 
@@ -1356,6 +1805,9 @@ Export-ModuleMember -Function @(
     'Repair-SetupWingetSource',
     'Install-SetupWingetApp',
     'Install-SetupLocalPackage',
+    'Get-SetupInstalledSoftware',
+    'Uninstall-SetupSoftware',
+    'Update-SetupSoftware',
     'Get-BuiltInAdminAccount',
     'Get-CurrentLocalAccount',
     'Enable-BuiltInAdministrator',

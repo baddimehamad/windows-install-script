@@ -27,7 +27,7 @@ $env:SETUP_GUI=0; irm https://tinyurl.com/27wv3wmc | iex
 
 ## 🪟 Window mode (GUI)
 
-Both front-ends do exactly the same things; pick whichever you prefer. The window is the default.
+Both front-ends install software, set up printers and manage local accounts. The window additionally checks installed versions, offers Winget updates and uninstalls applications. Pick whichever you prefer; the window is the default.
 
 - **Window (default):** `Run-Setup.bat`, `Run-Setup-Gui.bat`, `.\Install-MyPC.Gui.ps1`, or the one-liner above.
 - **Console:** `Run-Setup.bat console`, `.\Install-MyPC.ps1`, or the `SETUP_GUI=0` one-liner.
@@ -38,7 +38,7 @@ The window has five tabs:
 
 | Tab | What you can do |
 |-----|-----------------|
-| **Software** | Filter the list, tick applications, then **Install selected**. Each row shows the application logo, a `WINGET`/`LOCAL` badge and a status: `Ready`, `Will download`, `File missing`, `Installing...`, `Installed`, `Installed (restart)`, `Skipped` or `Failed`. |
+| **Software** | Filter the list, tick applications, then **Install selected**. **Check installed** fills the *Installed version* and *Available update* columns from Windows and Winget. Select installed apps to **Update selected** (Winget only) or **Uninstall selected** (after a confirmation). Each row shows the application logo, the `WINGET`/`LOCAL` badge and a status such as `Ready`, `Not installed`, `Installed`, `Update available`, `Installing...`, `Installed (restart)`, `Skipped`, `Updated`, `Uninstalled` or `Failed`. |
 | **Printers** | Pick a manufacturer, type the IP/hostname, port and optional name, then **Install printer**. The right-hand list shows installed printers and lets you rename one. |
 | **Users** | Rename a local account, change its password, or add/remove group membership. The only enabled administrator is marked `LAST ADMIN - LOCKED` and cannot be changed. |
 | **Account** | Enable the built-in Administrator (password typed twice, never stored), or rename the account you are signed in with. |
@@ -49,11 +49,12 @@ Notes:
 - **Nothing to install.** The window uses WPF and Windows PowerShell 5.1, both part of Windows 10 and 11. No PowerShell 7, no .NET download, no Python.
 - **English or French, automatically.** The window follows the Windows display language: French on a French PC, English everywhere else. Set `SETUP_UI_LANG=en` or `SETUP_UI_LANG=fr` before launching to force one. Log lines stay in English, like the console log. French text is written without accented characters so the scripts remain plain ASCII and safe on any Windows code page.
 - **Same elevation.** The window relaunches itself with UAC on start, and still passes the original user's SID, so "rename signed-in user" targets the right account.
-- **The window never freezes.** Installs run in a background runspace; a **Cancel** button appears in the status bar while something is running.
+- **The window never freezes.** Installs, updates and uninstalls run in a background runspace; a **Cancel** button appears in the status bar while something is running.
 - **Logs:** `Logs\gui-YYYYMMDD-HHMMSS.log`, one per window session.
 - **Logos:** each software row shows the image named by its `Logo` field in `Software.json` (for example `logo/chrome.png`). The files live in the `logo` folder. If an image is missing or unreadable, the row shows a colored tile with the application's first letter instead, so a bad logo never blocks an install.
+- **Installed checker (window only).** **Check installed** reads the 32-bit, 64-bit and per-user Add/Remove Programs entries and, for `WINGET` rows, the package list reported by Winget. The *Installed version* column shows the registry version when one exists. An update is offered only when Winget recognises the exact catalog ID in its `winget` source, so the window never proposes an update it cannot perform; unrecognised Winget IDs show `Unknown` and local installers show `Manual`. **Uninstall selected** uses `winget uninstall` when Winget manages the package and falls back to the registered uninstaller otherwise. A check runs automatically after every install, update or uninstall.
 - The GUI does **not** write `Software.json` — it is read-only. Edit the file by hand to change the catalog.
-- Closing the window during an install asks for confirmation; a child installer (winget, msiexec) may keep running in the background.
+- Closing the window during a task asks for confirmation; a child installer (winget, msiexec) may keep running in the background.
 
 ---
 
@@ -261,10 +262,14 @@ The window front-end shows a small logo next to every enabled `Apps` and
 {
   "Name": "My Custom App",
   "Path": "Installers\\MyCustomAppSetup.exe",
+  "MatchName": "My Custom App",
   "Arguments": [],
   "Enabled": true
 }
 ```
+
+- Optional `MatchName` tells the window's checker which Add/Remove Programs name to look for. Use it when the catalog name differs from the name the vendor registers, for example `"Microsoft Office Home and Business 2024"` for the French Office entry. Without it, the checker matches on `Name`.
+- A local installer has no update feed. The window shows `Manual` in the *Available update* column; run the installer again to update it.
 
 ### Add an installer that downloads from a URL
 
@@ -297,20 +302,23 @@ The menu shows `[WILL DOWNLOAD]` for these until the file exists.
 
 > Tip: only use installers you trust. Silent switches depend on the vendor — don't assume `/quiet` works everywhere.
 
-### Microsoft Office (`OfficeSetup.exe`)
+### Microsoft Office
 
-Default entry in `Software.json`:
+The shipped entry downloads the French Microsoft 365 / Office Home & Business 2024 bootstrapper on first use:
 
 ```json
 {
-  "Name": "Microsoft Office (OfficeSetup.exe)",
-  "Path": "OfficeSetup.exe",
+  "Name": "Microsoft Office Home Business 2024 (Francais)",
+  "Path": "Installers\\Office_HomeBusiness2024_FR_x64.exe",
+  "MatchName": "Microsoft Office Home and Business 2024",
+  "Url": "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=HomeBusiness2024Retail&platform=x64&language=fr-fr&version=O16GA",
   "Arguments": [],
   "Enabled": true
 }
 ```
 
-- Copy `OfficeSetup.exe` next to the scripts. The menu shows `[FILE NOT FOUND]` until it's there.
+- `MatchName` lets **Check installed** find the Add/Remove Programs entry, whose vendor name includes "and" and a language suffix.
+- To use a different Office edition, change `ProductreleaseID` and `language` in the URL (or point `Path` at your own `OfficeSetup.exe`). The installer also needs `MatchName` if its registered name differs from `Name`.
 - The script launches it as-is. Unattended install depends on your specific Office installer.
 - Activation still needs a valid license / Microsoft 365 account — this script does not bypass licensing.
 
@@ -372,6 +380,10 @@ Safety: if only one enabled administrator is left on the PC, its group membershi
 |---------|-----|
 | `winget is not available` | Install/update **App Installer** from https://aka.ms/getwinget, then rerun. Local installers still work without Winget. |
 | App shows wrong version / fails | Verify the Winget ID with `winget search <name>` and update `Software.json`. Vendors rename IDs sometimes. |
+| Checker says `Not installed` but the app is there | The Add/Remove Programs name differs from the catalog name. Add `"MatchName": "<exact registered name>"` to the entry, or set it to a distinctive prefix. Per-user installs are checked too, but portable apps with no uninstall entry cannot be detected. |
+| No update shown for an installed app | Winget only reports updates for IDs it recognises. Compare `winget list --id <id> --exact` with the catalog ID; if Winget shows a different ID (for example `Google.Chrome.Beta.EXE`), update `Software.json` or update the app manually. Local installers never show an update. |
+| **Update** / **Uninstall** stays disabled | Click **Check installed** first and tick an installed application. Update needs an available Winget update; Uninstall needs a Winget-managed package or an Add/Remove Programs entry. |
+| Uninstall fails or leaves the app behind | Run the window as administrator, check the **Log** tab, and use Windows **Settings → Apps** if the vendor's uninstaller requires interaction. The script uses `QuietUninstallString` when available, then `UninstallString`. |
 | `Software.json could not be parsed` | You broke the JSON (missing comma/quote). Validate it at https://jsonlint.com |
 | Local installer `FILE NOT FOUND` | Check the `Path` in `Software.json` — relative to the script folder. |
 | Logo missing / letter tile shown | Check the `Logo` path in `Software.json` (relative to the scripts) and that the file is a PNG the window can read. Online mode downloads logos best-effort; a failed download falls back to the initial tile and does not block the install. |

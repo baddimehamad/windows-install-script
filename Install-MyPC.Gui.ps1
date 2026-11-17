@@ -129,6 +129,17 @@ $script:StringTable = @{
     'Software.Install'          = @{ en = "Install selected"; fr = "Installer la selection" }
     'Software.InstallCount'     = @{ en = "Install selected ({0})"; fr = "Installer la selection ({0})" }
     'Software.Summary'          = @{ en = "{0} application(s) available, {1} selected."; fr = "{0} application(s) disponible(s), {1} selectionnee(s)." }
+    'Software.Check'            = @{ en = "Check installed"; fr = "Verifier l'installation" }
+    'Software.Update'           = @{ en = "Update selected"; fr = "Mettre a jour la selection" }
+    'Software.UpdateCount'      = @{ en = "Update selected ({0})"; fr = "Mettre a jour la selection ({0})" }
+    'Software.Uninstall'        = @{ en = "Uninstall selected"; fr = "Desinstaller la selection" }
+    'Software.UninstallCount'   = @{ en = "Uninstall selected ({0})"; fr = "Desinstaller la selection ({0})" }
+    'Software.CheckSummary'     = @{ en = "{0} application(s), {1} selected - {2} installed, {3} update(s) available."; fr = "{0} application(s), {1} selectionnee(s) - {2} installee(s), {3} mise(s) a jour disponible(s)." }
+    'Software.ColApplication'   = @{ en = "Application"; fr = "Application" }
+    'Software.ColVersion'       = @{ en = "Installed version"; fr = "Version installee" }
+    'Software.ColUpdate'        = @{ en = "Available update"; fr = "Mise a jour" }
+    'Software.ColType'          = @{ en = "Type"; fr = "Type" }
+    'Software.ColStatus'        = @{ en = "Status"; fr = "Etat" }
 
     'Status.Ready'              = @{ en = "Ready"; fr = "Pret" }
     'Status.Download'           = @{ en = "Will download"; fr = "Sera telecharge" }
@@ -140,6 +151,15 @@ $script:StringTable = @{
     'Status.Skipped'            = @{ en = "Skipped"; fr = "Ignore" }
     'Status.Failed'             = @{ en = "Failed"; fr = "Echec" }
     'Status.Cancelled'          = @{ en = "Cancelled"; fr = "Annule" }
+    'Status.NotInstalled'       = @{ en = "Not installed"; fr = "Non installe" }
+    'Status.UpdateAvailable'    = @{ en = "Update available"; fr = "Mise a jour disponible" }
+    'Status.Updating'           = @{ en = "Updating..."; fr = "Mise a jour..." }
+    'Status.Updated'            = @{ en = "Updated"; fr = "Mis a jour" }
+    'Status.UpdatedRestart'     = @{ en = "Updated (restart)"; fr = "Mis a jour (redemarrage)" }
+    'Status.UpToDate'           = @{ en = "Up to date"; fr = "A jour" }
+    'Status.Uninstalling'       = @{ en = "Uninstalling..."; fr = "Desinstallation..." }
+    'Status.Uninstalled'        = @{ en = "Uninstalled"; fr = "Desinstalle" }
+    'Status.UninstalledRestart' = @{ en = "Uninstalled (restart)"; fr = "Desinstalle (redemarrage)" }
 
     'Printers.Title'            = @{ en = "Printers"; fr = "Imprimantes" }
     'Printers.Subtitle'         = @{ en = "Install a network printer over TCP/IP, or rename an existing one. Driver packages come from the Drivers folder or the repository cache."; fr = "Installez une imprimante reseau via TCP/IP, ou renommez-en une. Les pilotes proviennent du dossier Drivers ou du cache du depot." }
@@ -260,6 +280,40 @@ $script:StringTable = @{
     'Install.WingetMissing'     = @{ en = "winget is not available. Winget apps will be skipped; local installers can still run."; fr = "winget est indisponible. Les applications Winget seront ignorees ; les installateurs locaux restent possibles." }
     'Install.WingetHint'        = @{ en = "Install Microsoft App Installer from https://aka.ms/getwinget and try again."; fr = "Installez Microsoft App Installer depuis https://aka.ms/getwinget puis reessayez." }
     'Install.CheckingWinget'    = @{ en = "Checking Winget sources..."; fr = "Verification des sources Winget..." }
+
+    'Check.Running'             = @{ en = "Checking installed software and updates..."; fr = "Verification des logiciels installes et des mises a jour..." }
+    'Check.FinishedTitle'       = @{ en = "Check finished"; fr = "Verification terminee" }
+    'Check.Finished'            = @{ en = "{0} installed application(s), {1} update(s) available."; fr = "{0} application(s) installee(s), {1} mise(s) a jour disponible(s)." }
+    'Check.FailedTitle'         = @{ en = "Check failed"; fr = "Echec de la verification" }
+    'Check.NoResult'            = @{ en = "The installed software check did not return a result."; fr = "La verification des logiciels installes n'a renvoye aucun resultat." }
+    'Check.NotInstalled'        = @{ en = "-"; fr = "-" }
+    'Check.UnknownVersion'      = @{ en = "Installed"; fr = "Installe" }
+    'Check.Latest'              = @{ en = "Up to date"; fr = "A jour" }
+    'Check.Manual'              = @{ en = "Manual"; fr = "Manuel" }
+    'Check.Unknown'             = @{ en = "Unknown"; fr = "Inconnu" }
+    'Check.WingetMissing'       = @{ en = "winget is not available, so update information cannot be checked."; fr = "winget est indisponible : les mises a jour ne peuvent pas etre verifiees." }
+
+    'Update.NothingTitle'       = @{ en = "Nothing to update"; fr = "Aucune mise a jour" }
+    'Update.NothingText'        = @{ en = "Select at least one installed application with an available update."; fr = "Selectionnez au moins une application installee avec une mise a jour disponible." }
+    'Update.Started'            = @{ en = "Software update started: {0} item(s)."; fr = "Mise a jour demarree : {0} element(s)." }
+    'Update.Step'               = @{ en = "Updating {0} ({1}/{2})"; fr = "Mise a jour de {0} ({1}/{2})" }
+    'Update.FinishedTitle'      = @{ en = "Update finished"; fr = "Mise a jour terminee" }
+    'Update.FailedSummary'      = @{ en = "{0} item(s) could not be updated:{1}{2}{1}{1}See the Log tab for details."; fr = "{0} element(s) n'ont pas pu etre mis a jour :{1}{2}{1}{1}Voir l'onglet Journal." }
+    'Update.Summary'            = @{ en = "Update finished.{0}{0}Updated: {1}{0}Already up to date: {2}"; fr = "Mise a jour terminee.{0}{0}Mis a jour : {1}{0}Deja a jour : {2}" }
+    'Update.FinishedLog'        = @{ en = "Software update finished: {0} updated, {1} failed, {2} up to date."; fr = "Mise a jour terminee : {0} mis a jour, {1} en echec, {2} deja a jour." }
+    'Update.CancelledRest'      = @{ en = "The remaining items were not updated because the task was cancelled."; fr = "Les elements restants n'ont pas ete mis a jour (tache annulee)." }
+
+    'Uninstall.NothingTitle'    = @{ en = "Nothing to uninstall"; fr = "Aucune desinstallation" }
+    'Uninstall.NothingText'     = @{ en = "Select at least one installed application."; fr = "Selectionnez au moins une application installee." }
+    'Uninstall.ConfirmTitle'    = @{ en = "Confirm uninstall"; fr = "Confirmer la desinstallation" }
+    'Uninstall.ConfirmText'     = @{ en = "Uninstall {0} application(s)?{1}{1}{2}{1}{1}The registered uninstaller runs silently when possible. A restart may be required."; fr = "Desinstaller {0} application(s) ?{1}{1}{2}{1}{1}Le desinstalleur enregistre s'execute silencieusement lorsque possible. Un redemarrage peut etre necessaire." }
+    'Uninstall.Started'         = @{ en = "Software uninstall started: {0} item(s)."; fr = "Desinstallation demarree : {0} element(s)." }
+    'Uninstall.Step'            = @{ en = "Uninstalling {0} ({1}/{2})"; fr = "Desinstallation de {0} ({1}/{2})" }
+    'Uninstall.FinishedTitle'   = @{ en = "Uninstall finished"; fr = "Desinstallation terminee" }
+    'Uninstall.FailedSummary'   = @{ en = "{0} item(s) could not be uninstalled:{1}{2}{1}{1}See the Log tab for details."; fr = "{0} element(s) n'ont pas pu etre desinstalles :{1}{2}{1}{1}Voir l'onglet Journal." }
+    'Uninstall.Summary'         = @{ en = "Uninstall finished.{0}{0}Uninstalled: {1}{0}Skipped: {2}"; fr = "Desinstallation terminee.{0}{0}Desinstalles : {1}{0}Ignores : {2}" }
+    'Uninstall.FinishedLog'     = @{ en = "Software uninstall finished: {0} uninstalled, {1} failed, {2} skipped."; fr = "Desinstallation terminee : {0} desinstalles, {1} en echec, {2} ignores." }
+    'Uninstall.CancelledRest'   = @{ en = "The remaining items were not uninstalled because the task was cancelled."; fr = "Les elements restants n'ont pas ete desinstalles (tache annulee)." }
 
     # Keys used only by the window code, not by the XAML.
     'Common.TaskFailed'         = @{ en = "The task failed."; fr = "La tache a echoue." }
@@ -587,20 +641,53 @@ $xaml = @'
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
               <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBox x:Name="SoftwareFilter" Style="{StaticResource FieldBox}" Height="32" VerticalAlignment="Center"/>
-            <Button x:Name="SoftwareSelectAll" Grid.Column="1" Content="@@Software.SelectAll@@" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0"/>
-            <Button x:Name="SoftwareSelectNone" Grid.Column="2" Content="@@Common.Clear@@" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
+            <Button x:Name="SoftwareCheckButton" Grid.Column="1" Content="@@Software.Check@@" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0"/>
+            <Button x:Name="SoftwareSelectAll" Grid.Column="2" Content="@@Software.SelectAll@@" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
+            <Button x:Name="SoftwareSelectNone" Grid.Column="3" Content="@@Common.Clear@@" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
           </Grid>
           <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-              <StackPanel x:Name="SoftwareList"/>
-            </ScrollViewer>
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+              <Border Background="#F8FAFC" BorderBrush="#EFF1F4" BorderThickness="0,0,0,1" CornerRadius="8,8,0,0" Padding="12,8">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="32"/>
+                    <ColumnDefinition Width="40"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="110"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="2" Text="@@Software.ColApplication@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="3" Text="@@Software.ColVersion@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="4" Text="@@Software.ColUpdate@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="5" Text="@@Software.ColType@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="6" Text="@@Software.ColStatus@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                </Grid>
+              </Border>
+              <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="SoftwareList"/>
+              </ScrollViewer>
+            </Grid>
           </Border>
           <Grid Grid.Row="3" Margin="0,14,0,0">
-            <TextBlock x:Name="SoftwareSummary" VerticalAlignment="Center" Foreground="#5F6B76" FontSize="12.5"/>
-            <Button x:Name="SoftwareInstallButton" Content="@@Software.Install@@" HorizontalAlignment="Right"
-                    Style="{StaticResource PrimaryButton}" Padding="20,9"/>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="SoftwareSummary" VerticalAlignment="Center" Foreground="#5F6B76" FontSize="12.5" Margin="0,0,12,0"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+              <Button x:Name="SoftwareUninstallButton" Content="@@Software.Uninstall@@" Style="{StaticResource SecondaryButton}" Padding="14,9" Margin="0,0,8,0" IsEnabled="False"/>
+              <Button x:Name="SoftwareUpdateButton" Content="@@Software.Update@@" Style="{StaticResource SecondaryButton}" Padding="14,9" Margin="0,0,8,0" IsEnabled="False"/>
+              <Button x:Name="SoftwareInstallButton" Content="@@Software.Install@@" Style="{StaticResource PrimaryButton}" Padding="20,9"/>
+            </StackPanel>
           </Grid>
         </Grid>
 
@@ -802,6 +889,9 @@ $script:SoftwareFilter = Get-Control 'SoftwareFilter'
 $script:SoftwareList = Get-Control 'SoftwareList'
 $script:SoftwareSummary = Get-Control 'SoftwareSummary'
 $script:SoftwareInstallButton = Get-Control 'SoftwareInstallButton'
+$script:SoftwareUpdateButton = Get-Control 'SoftwareUpdateButton'
+$script:SoftwareUninstallButton = Get-Control 'SoftwareUninstallButton'
+$script:SoftwareCheckButton = Get-Control 'SoftwareCheckButton'
 $script:SoftwareSelectAll = Get-Control 'SoftwareSelectAll'
 $script:SoftwareSelectNone = Get-Control 'SoftwareSelectNone'
 $script:PrinterMake = Get-Control 'PrinterMake'
@@ -841,6 +931,11 @@ $script:Brushes = @{}
 $script:LevelBrushes = @{}
 $script:LogoCache = @{}
 $script:SoftwareRows = @()
+$script:SoftwareChecked = $false
+$script:SoftwareInstalledCount = 0
+$script:SoftwareUpdateCount = 0
+$script:QueueAction = 'install'
+$script:CheckNotify = $true
 $script:PrinterRows = @()
 $script:UserRows = @()
 $script:Queue = @()
@@ -1232,7 +1327,7 @@ function New-SoftwareRow {
     $container.BorderThickness = [System.Windows.Thickness]::new(0, 0, 0, 1)
     $container.Padding = [System.Windows.Thickness]::new(12, 9, 12, 9)
 
-    $grid = New-UiGrid -Columns @('32', '40', '*', '80', '120')
+    $grid = New-UiGrid -Columns @('32', '40', '*', '140', '120', '70', '110')
 
     $checkBox = [System.Windows.Controls.CheckBox]::new()
     $checkBox.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
@@ -1256,6 +1351,18 @@ function New-SoftwareRow {
     [System.Windows.Controls.Grid]::SetColumn($textStack, 2)
     [void]$grid.Children.Add($textStack)
 
+    $version = New-UiText -Text '' -Size 11.5 -Color '#3A4650'
+    $version.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+    $version.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+    [System.Windows.Controls.Grid]::SetColumn($version, 3)
+    [void]$grid.Children.Add($version)
+
+    $update = New-UiText -Text '' -Size 11.5 -Color '#5F6B76'
+    $update.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+    $update.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+    [System.Windows.Controls.Grid]::SetColumn($update, 4)
+    [void]$grid.Children.Add($update)
+
     $badge = [System.Windows.Controls.Border]::new()
     $badge.CornerRadius = [System.Windows.CornerRadius]::new(9)
     $badge.Padding = [System.Windows.Thickness]::new(8, 2, 8, 2)
@@ -1269,13 +1376,13 @@ function New-SoftwareRow {
         $badgeText = New-UiText -Text 'LOCAL' -Size 10 -Weight SemiBold -Color '#4B3A82'
     }
     $badge.Child = $badgeText
-    [System.Windows.Controls.Grid]::SetColumn($badge, 3)
+    [System.Windows.Controls.Grid]::SetColumn($badge, 5)
     [void]$grid.Children.Add($badge)
 
     $status = New-UiText -Text $StatusText -Size 11.5 -Color '#5F6B76'
     $status.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Right
     $status.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-    [System.Windows.Controls.Grid]::SetColumn($status, 4)
+    [System.Windows.Controls.Grid]::SetColumn($status, 6)
     [void]$grid.Children.Add($status)
 
     $container.Child = $grid
@@ -1285,19 +1392,28 @@ function New-SoftwareRow {
     $checkBox.Add_Unchecked({ Update-SoftwareActions })
 
     return [pscustomobject]@{
-        Kind      = $Item.Kind
-        Name      = $Item.Name
-        Detail    = $Item.Detail
-        Item      = $Item
-        Container = $container
-        CheckBox  = $checkBox
-        Status    = $status
+        Kind            = $Item.Kind
+        Name            = $Item.Name
+        Detail          = $Item.Detail
+        Item            = $Item
+        Container       = $container
+        CheckBox        = $checkBox
+        Version         = $version
+        Update          = $update
+        Status          = $status
+        Installed       = $false
+        UpdateAvailable = $false
+        Uninstallable   = $false
+        WingetManaged   = $false
     }
 }
 
 function Refresh-SoftwareList {
     $script:SoftwareList.Children.Clear()
     $script:SoftwareRows = @()
+    $script:SoftwareChecked = $false
+    $script:SoftwareInstalledCount = 0
+    $script:SoftwareUpdateCount = 0
 
     $catalog = @()
     try { $catalog = @(Get-SoftwareCatalog -Config $script:Config) }
@@ -1336,14 +1452,132 @@ function Apply-SoftwareFilter {
 }
 
 function Update-SoftwareActions {
-    $selected = @($script:SoftwareRows | Where-Object { $_.CheckBox.IsChecked -eq $true }).Count
-    if ($selected -gt 0) {
-        $script:SoftwareInstallButton.Content = ((Get-UiText 'Software.InstallCount') -f $selected)
+    $selected = @($script:SoftwareRows | Where-Object { $_.CheckBox.IsChecked -eq $true })
+    $selectedCount = $selected.Count
+    $updateCount = @($selected | Where-Object { $_.UpdateAvailable }).Count
+    $uninstallCount = @($selected | Where-Object { $_.Installed -and $_.Uninstallable }).Count
+
+    if ($selectedCount -gt 0) {
+        $script:SoftwareInstallButton.Content = ((Get-UiText 'Software.InstallCount') -f $selectedCount)
     } else {
         $script:SoftwareInstallButton.Content = Get-UiText 'Software.Install'
     }
-    $script:SoftwareInstallButton.IsEnabled = ($selected -gt 0) -and (-not $script:Busy)
-    $script:SoftwareSummary.Text = ((Get-UiText 'Software.Summary') -f $script:SoftwareRows.Count, $selected)
+    if ($updateCount -gt 0) {
+        $script:SoftwareUpdateButton.Content = ((Get-UiText 'Software.UpdateCount') -f $updateCount)
+    } else {
+        $script:SoftwareUpdateButton.Content = Get-UiText 'Software.Update'
+    }
+    if ($uninstallCount -gt 0) {
+        $script:SoftwareUninstallButton.Content = ((Get-UiText 'Software.UninstallCount') -f $uninstallCount)
+    } else {
+        $script:SoftwareUninstallButton.Content = Get-UiText 'Software.Uninstall'
+    }
+
+    $script:SoftwareInstallButton.IsEnabled = ($selectedCount -gt 0) -and (-not $script:Busy)
+    $script:SoftwareUpdateButton.IsEnabled = ($updateCount -gt 0) -and (-not $script:Busy)
+    $script:SoftwareUninstallButton.IsEnabled = ($uninstallCount -gt 0) -and (-not $script:Busy)
+    $script:SoftwareCheckButton.IsEnabled = -not $script:Busy
+
+    if ($script:SoftwareChecked) {
+        $script:SoftwareSummary.Text = ((Get-UiText 'Software.CheckSummary') -f `
+            $script:SoftwareRows.Count, $selectedCount, $script:SoftwareInstalledCount, $script:SoftwareUpdateCount)
+    } else {
+        $script:SoftwareSummary.Text = ((Get-UiText 'Software.Summary') -f $script:SoftwareRows.Count, $selectedCount)
+    }
+}
+
+function Start-SoftwareCheck {
+    <#
+    .SYNOPSIS
+        Runs the installed-version and update check in the background.
+    .DESCRIPTION
+        Notify is false for the automatic refresh after an install, update or
+        uninstall: the queue already showed its own summary.
+    #>
+    param([bool]$Notify = $true)
+    if ($script:Busy) { return }
+    $script:CheckNotify = $Notify
+    Start-SetupTask -Label (Get-UiText 'Check.Running') -Command 'Get-SetupInstalledSoftware' `
+        -Parameters @{ Config = $script:Config } -OnComplete 'Complete-SoftwareCheck'
+}
+
+function Complete-SoftwareCheck {
+    $result = Get-FirstResult
+    if ($null -eq $result -or $null -eq $result.PSObject.Properties['Success'] -or -not $result.Success) {
+        Add-LogLine -Level Error -Message (Get-UiText 'Check.NoResult')
+        if ($script:CheckNotify) {
+            Show-Message (Get-UiText 'Check.NoResult') (Get-UiText 'Check.FailedTitle') 'Warning'
+        }
+        return
+    }
+
+    $packages = @($result.Data.Packages)
+    $byName = @{}
+    foreach ($package in $packages) { $byName[[string]$package.Name] = $package }
+
+    foreach ($row in $script:SoftwareRows) {
+        if (-not $byName.ContainsKey([string]$row.Name)) { continue }
+        $check = $byName[[string]$row.Name]
+        $row.Installed = [bool]$check.Installed
+        $row.UpdateAvailable = [bool]$check.UpdateAvailable
+        $row.Uninstallable = [bool]$check.Uninstallable
+        $row.WingetManaged = [bool]$check.WingetManaged
+
+        if (-not $row.Installed) {
+            $row.Version.Text = Get-UiText 'Check.NotInstalled'
+            $row.Version.Foreground = Get-Brush '#93A0AA'
+            $row.Version.ToolTip = $null
+            $row.Update.Text = ''
+            $row.Update.ToolTip = $null
+            Set-SoftwareState -Row $row -Text (Get-UiText 'Status.NotInstalled') -Tone 'Muted'
+            continue
+        }
+
+        $versionText = [string]$check.Version
+        if ([string]::IsNullOrWhiteSpace($versionText)) { $versionText = Get-UiText 'Check.UnknownVersion' }
+        $row.Version.Text = $versionText
+        $row.Version.Foreground = Get-Brush '#3A4650'
+
+        if ($check.UpdateAvailable) {
+            $row.Update.Text = [string]$check.Available
+            $row.Update.Foreground = Get-Brush '#9A6100'
+            $row.Update.ToolTip = ((Get-UiText 'Software.ColUpdate') + ': ' + [string]$check.Available)
+            Set-SoftwareState -Row $row -Text (Get-UiText 'Status.UpdateAvailable') -Tone 'Warn'
+        } elseif ($check.UpdateKnown) {
+            $row.Update.Text = Get-UiText 'Check.Latest'
+            $row.Update.Foreground = Get-Brush '#107C10'
+            $row.Update.ToolTip = $null
+            Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Installed') -Tone 'Good'
+        } else {
+            if ($row.Kind -eq 'local') {
+                $row.Update.Text = Get-UiText 'Check.Manual'
+            } else {
+                $row.Update.Text = Get-UiText 'Check.Unknown'
+            }
+            $row.Update.Foreground = Get-Brush '#93A0AA'
+            $row.Update.ToolTip = $null
+            Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Installed') -Tone 'Good'
+        }
+        $row.Version.ToolTip = $versionText
+    }
+
+    $script:SoftwareChecked = $true
+    $script:SoftwareInstalledCount = [int]$result.Data.InstalledCount
+    $script:SoftwareUpdateCount = [int]$result.Data.UpdateCount
+    Update-SoftwareActions
+
+    if (-not $result.Data.WingetAvailable) {
+        Add-LogLine -Level Warning -Message (Get-UiText 'Check.WingetMissing')
+    }
+    if ($script:CheckNotify) {
+        Show-Message ((Get-UiText 'Check.Finished') -f $script:SoftwareInstalledCount, $script:SoftwareUpdateCount) `
+            (Get-UiText 'Check.FinishedTitle') 'Information'
+    }
+}
+
+function Get-SoftwareNameList {
+    param($Rows)
+    return (@($Rows | ForEach-Object { [string]$_.Name }) -join "`r`n")
 }
 
 function Start-SoftwareInstall {
@@ -1353,23 +1587,80 @@ function Start-SoftwareInstall {
         Show-Message (Get-UiText 'Install.NothingText') (Get-UiText 'Install.NothingTitle') 'Warning'
         return
     }
+    Start-SoftwareQueue -Action 'install' -Rows $selected
+}
 
-    $script:Queue = $selected
+function Start-SoftwareUpdate {
+    if ($script:Busy) { return }
+    $selected = @($script:SoftwareRows | Where-Object { $_.CheckBox.IsChecked -eq $true })
+    $eligible = @($selected | Where-Object { $_.UpdateAvailable })
+    if ($selected.Count -eq 0 -or $eligible.Count -eq 0) {
+        Show-Message (Get-UiText 'Update.NothingText') (Get-UiText 'Update.NothingTitle') 'Warning'
+        return
+    }
+    if ($eligible.Count -lt $selected.Count) {
+        Add-LogLine -Level Info -Message ("{0} selected item(s) have no available update and will not be updated." -f ($selected.Count - $eligible.Count))
+    }
+    Start-SoftwareQueue -Action 'update' -Rows $eligible
+}
+
+function Start-SoftwareUninstall {
+    if ($script:Busy) { return }
+    $selected = @($script:SoftwareRows | Where-Object { $_.CheckBox.IsChecked -eq $true })
+    $eligible = @($selected | Where-Object { $_.Installed -and $_.Uninstallable })
+    if ($selected.Count -eq 0 -or $eligible.Count -eq 0) {
+        Show-Message (Get-UiText 'Uninstall.NothingText') (Get-UiText 'Uninstall.NothingTitle') 'Warning'
+        return
+    }
+    if ($eligible.Count -lt $selected.Count) {
+        Add-LogLine -Level Info -Message ("{0} selected item(s) are not installed or cannot be uninstalled and will be skipped." -f ($selected.Count - $eligible.Count))
+    }
+    $confirmText = (Get-UiText 'Uninstall.ConfirmText') -f $eligible.Count, "`r`n", (Get-SoftwareNameList -Rows $eligible)
+    if (-not (Show-Confirm $confirmText (Get-UiText 'Uninstall.ConfirmTitle'))) { return }
+    Start-SoftwareQueue -Action 'uninstall' -Rows $eligible
+}
+
+function Start-SoftwareQueue {
+    param(
+        [ValidateSet('install', 'update', 'uninstall')][string]$Action,
+        [object[]]$Rows
+    )
+    if ($script:Busy) { return }
+    if ($null -eq $Rows -or $Rows.Count -eq 0) { return }
+
+    $script:QueueAction = $Action
+    $script:Queue = @($Rows)
     $script:QueueIndex = 0
-    $script:QueueTotal = $selected.Count
+    $script:QueueTotal = $Rows.Count
     $script:QueueResults.Clear()
-    foreach ($row in $selected) { Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Queued') -Tone 'Muted' }
+    foreach ($row in $Rows) { Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Queued') -Tone 'Muted' }
 
-    Add-LogLine -Level Task -Message ("Software installation started: {0} item(s)." -f $selected.Count)
+    switch ($Action) {
+        'update' {
+            Add-LogLine -Level Task -Message ((Get-UiText 'Update.Started') -f $Rows.Count)
+        }
+        'uninstall' {
+            Add-LogLine -Level Task -Message ((Get-UiText 'Uninstall.Started') -f $Rows.Count)
+        }
+        default {
+            Add-LogLine -Level Task -Message ((Get-UiText 'Install.Started') -f $Rows.Count)
+        }
+    }
+
+    if ($Action -eq 'uninstall') {
+        Start-NextSoftware
+        return
+    }
+
     $script:WingetAvailable = ($null -ne (Get-Command winget.exe -ErrorAction SilentlyContinue))
-
-    $wingetCount = @($selected | Where-Object { $_.Kind -eq 'winget' }).Count
+    $wingetCount = @($Rows | Where-Object { $_.Kind -eq 'winget' }).Count
     if ($wingetCount -gt 0 -and -not $script:WingetAvailable) {
-        Add-LogLine -Level Warning -Message 'winget is not available. Winget apps will be skipped; local installers can still run.'
-        Add-LogLine -Level Warning -Message 'Install Microsoft App Installer from https://aka.ms/getwinget and try again.'
+        Add-LogLine -Level Warning -Message (Get-UiText 'Install.WingetMissing')
+        Add-LogLine -Level Warning -Message (Get-UiText 'Install.WingetHint')
         Start-NextSoftware
     } elseif ($wingetCount -gt 0) {
-        Start-SetupTask -Label (Get-UiText 'Install.CheckingWinget') -Command 'Repair-SetupWingetSource' -Parameters @{} -OnComplete 'Start-NextSoftware'
+        Start-SetupTask -Label (Get-UiText 'Install.CheckingWinget') -Command 'Repair-SetupWingetSource' `
+            -Parameters @{} -OnComplete 'Start-NextSoftware'
     } else {
         Start-NextSoftware
     }
@@ -1384,14 +1675,30 @@ function Start-NextSoftware {
     $row = $script:Queue[$script:QueueIndex]
     $script:CurrentRow = $row
     $script:QueueIndex++
-    Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Installing') -Tone 'Accent'
     Add-LogLine -Level Info -Message ("[{0}/{1}] {2}" -f $script:QueueIndex, $script:QueueTotal, $row.Name)
 
-    $label = ((Get-UiText 'Install.Step') -f $row.Name, $script:QueueIndex, $script:QueueTotal)
-    if ($row.Kind -eq 'winget') {
-        Start-SetupTask -Label $label -Command 'Install-SetupWingetApp' -Parameters @{ App = $row.Item } -OnComplete 'Complete-SoftwareStep'
-    } else {
-        Start-SetupTask -Label $label -Command 'Install-SetupLocalPackage' -Parameters @{ Installer = $row.Item } -OnComplete 'Complete-SoftwareStep'
+    switch ($script:QueueAction) {
+        'update' {
+            Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Updating') -Tone 'Accent'
+            $label = ((Get-UiText 'Update.Step') -f $row.Name, $script:QueueIndex, $script:QueueTotal)
+            Start-SetupTask -Label $label -Command 'Update-SetupSoftware' `
+                -Parameters @{ CatalogItem = $row.Item } -OnComplete 'Complete-SoftwareStep'
+        }
+        'uninstall' {
+            Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Uninstalling') -Tone 'Accent'
+            $label = ((Get-UiText 'Uninstall.Step') -f $row.Name, $script:QueueIndex, $script:QueueTotal)
+            Start-SetupTask -Label $label -Command 'Uninstall-SetupSoftware' `
+                -Parameters @{ CatalogItem = $row.Item; WingetManaged = [bool]$row.WingetManaged } -OnComplete 'Complete-SoftwareStep'
+        }
+        default {
+            Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Installing') -Tone 'Accent'
+            $label = ((Get-UiText 'Install.Step') -f $row.Name, $script:QueueIndex, $script:QueueTotal)
+            if ($row.Kind -eq 'winget') {
+                Start-SetupTask -Label $label -Command 'Install-SetupWingetApp' -Parameters @{ App = $row.Item } -OnComplete 'Complete-SoftwareStep'
+            } else {
+                Start-SetupTask -Label $label -Command 'Install-SetupLocalPackage' -Parameters @{ Installer = $row.Item } -OnComplete 'Complete-SoftwareStep'
+            }
+        }
     }
 }
 
@@ -1411,11 +1718,23 @@ function Complete-SoftwareStep {
         }
         [void]$script:QueueResults.Add($result)
 
+        $successText = 'Status.Installed'
+        $restartText = 'Status.InstalledRestart'
+        $skippedText = 'Status.Skipped'
+        if ($script:QueueAction -eq 'update') {
+            $successText = 'Status.Updated'
+            $restartText = 'Status.UpdatedRestart'
+            $skippedText = 'Status.UpToDate'
+        } elseif ($script:QueueAction -eq 'uninstall') {
+            $successText = 'Status.Uninstalled'
+            $restartText = 'Status.UninstalledRestart'
+        }
+
         if ($result.Success -and -not $result.Skipped) {
-            if ($result.RestartRequired) { Set-SoftwareState -Row $row -Text (Get-UiText 'Status.InstalledRestart') -Tone 'Warn' }
-            else { Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Installed') -Tone 'Good' }
+            if ($result.RestartRequired) { Set-SoftwareState -Row $row -Text (Get-UiText $restartText) -Tone 'Warn' }
+            else { Set-SoftwareState -Row $row -Text (Get-UiText $successText) -Tone 'Good' }
         } elseif ($result.Skipped) {
-            Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Skipped') -Tone 'Warn'
+            Set-SoftwareState -Row $row -Text (Get-UiText $skippedText) -Tone 'Warn'
         } else {
             Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Failed') -Tone 'Bad'
         }
@@ -1424,13 +1743,33 @@ function Complete-SoftwareStep {
 }
 
 function Complete-SoftwareRun {
+    $action = $script:QueueAction
     $failed = @($script:QueueResults | Where-Object { -not $_.Success -and -not $_.Skipped })
-    $installed = @($script:QueueResults | Where-Object { $_.Success -and -not $_.Skipped }).Count
+    $done = @($script:QueueResults | Where-Object { $_.Success -and -not $_.Skipped }).Count
     $skipped = @($script:QueueResults | Where-Object { $_.Skipped }).Count
 
-    Add-LogLine -Level Task -Message ("Software installation finished: {0} installed, {1} failed, {2} skipped." -f $installed, $failed.Count, $skipped)
+    $finishedTitle = 'Install.FinishedTitle'
+    $failedSummary = 'Install.FailedSummary'
+    $summary = 'Install.Summary'
+    $finishedLog = 'Install.FinishedLog'
+    $cancelledRest = 'Install.CancelledRest'
+    if ($action -eq 'update') {
+        $finishedTitle = 'Update.FinishedTitle'
+        $failedSummary = 'Update.FailedSummary'
+        $summary = 'Update.Summary'
+        $finishedLog = 'Update.FinishedLog'
+        $cancelledRest = 'Update.CancelledRest'
+    } elseif ($action -eq 'uninstall') {
+        $finishedTitle = 'Uninstall.FinishedTitle'
+        $failedSummary = 'Uninstall.FailedSummary'
+        $summary = 'Uninstall.Summary'
+        $finishedLog = 'Uninstall.FinishedLog'
+        $cancelledRest = 'Uninstall.CancelledRest'
+    }
+
+    Add-LogLine -Level Task -Message ((Get-UiText $finishedLog) -f $done, $failed.Count, $skipped)
     if ($script:Cancelled) {
-        Add-LogLine -Level Warning -Message 'The remaining items were not installed because the task was cancelled.'
+        Add-LogLine -Level Warning -Message (Get-UiText $cancelledRest)
     }
 
     $script:CurrentRow = $null
@@ -1440,11 +1779,15 @@ function Complete-SoftwareRun {
 
     if ($failed.Count -gt 0) {
         $lines = ($failed | ForEach-Object { ' - ' + $_.Name }) -join "`r`n"
-        Show-Message ((Get-UiText 'Install.FailedSummary') -f $failed.Count, "`r`n", $lines) (Get-UiText 'Install.FinishedTitle') 'Warning'
+        Show-Message ((Get-UiText $failedSummary) -f $failed.Count, "`r`n", $lines) (Get-UiText $finishedTitle) 'Warning'
     } else {
-        Show-Message ((Get-UiText 'Install.Summary') -f "`r`n", $installed, $skipped) (Get-UiText 'Install.FinishedTitle') 'Information'
+        Show-Message ((Get-UiText $summary) -f "`r`n", $done, $skipped) (Get-UiText $finishedTitle) 'Information'
     }
     Update-SoftwareActions
+
+    # Refresh versions and update badges after every successful queue so the
+    # checker reflects what just happened instead of stale pre-action data.
+    if (-not $script:Cancelled) { Start-SoftwareCheck -Notify $false }
 }
 
 # --------------------------------------------------------------------------
@@ -2193,7 +2536,10 @@ function Show-PasswordDialog {
 
 $script:ActionButtons = @(
     $script:ConsoleModeButton,
+    $script:SoftwareCheckButton,
     $script:SoftwareInstallButton,
+    $script:SoftwareUpdateButton,
+    $script:SoftwareUninstallButton,
     $script:PrinterInstallButton,
     $script:PrinterRefreshButton,
     $script:UserRefreshButton,
@@ -2217,6 +2563,9 @@ $script:SoftwareSelectNone.Add_Click({
     foreach ($row in $script:SoftwareRows) { $row.CheckBox.IsChecked = $false }
 })
 $script:SoftwareInstallButton.Add_Click({ Start-SoftwareInstall })
+$script:SoftwareUpdateButton.Add_Click({ Start-SoftwareUpdate })
+$script:SoftwareUninstallButton.Add_Click({ Start-SoftwareUninstall })
+$script:SoftwareCheckButton.Add_Click({ Start-SoftwareCheck })
 
 $script:PrinterMake.Add_SelectionChanged({ Update-PrinterDriverInfo })
 $script:PrinterInstallButton.Add_Click({ Invoke-PrinterInstall })
