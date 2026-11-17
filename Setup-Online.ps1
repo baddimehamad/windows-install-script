@@ -4,12 +4,12 @@
     Online launcher for Windows Automatic Setup.
 
 .DESCRIPTION
-    Downloads only the files needed to run (Install-MyPC.ps1 + Software.json)
-    into a shared folder, then runs Install-MyPC.ps1 from disk. Running from
-    disk is required because the main script uses its own file location for
-    elevation, Software.json lookup, and logging.
+    Downloads only the files needed to run (Install-MyPC.ps1, Setup.Core.psm1
+    and Software.json) into a shared folder, then runs Install-MyPC.ps1 from
+    disk. Running from disk is required because the scripts use their own file
+    location for elevation, Software.json lookup, and logging.
 
-    Only ~60 KB is downloaded. The full repo ZIP is NOT used, because it
+    Only ~100 KB is downloaded. The full repo ZIP is NOT used, because it
     contains ~100 MB of printer drivers (Drivers/) that would make every
     first launch slow.
 
@@ -18,11 +18,18 @@
     and is invisible to a different admin account after the UAC prompt.
 
 .USAGE
-    Short:
+    Console, short:
     irm https://tinyurl.com/27wv3wmc | iex
+
+    Window (GUI), short:
+    $env:SETUP_GUI=1; irm https://tinyurl.com/27wv3wmc | iex
 
     Full URL:
     irm https://raw.githubusercontent.com/baddimehamad/windows-install-script/main/Setup-Online.ps1 | iex
+
+    From a downloaded copy:
+    .\Setup-Online.ps1            # console menu
+    .\Setup-Online.ps1 -Gui       # WPF window
 
 .NOTES
     Local files (OfficeSetup.exe, Installers/ content) are not part of the
@@ -32,12 +39,19 @@
     printer, into C:\ProgramData\Windows_Auto_Setup_Online\Drivers (cached).
 #>
 
+param(
+    [switch]$Gui
+)
+
+if (-not $Gui -and $env:SETUP_GUI -eq '1') { $Gui = $true }
+
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Repo    = 'baddimehamad/windows-install-script'
 $Branch  = 'main'
 $BaseUrl = "https://raw.githubusercontent.com/$Repo/$Branch"
-$NeededFiles = @('Install-MyPC.ps1', 'Software.json')
+$NeededFiles = @('Install-MyPC.ps1', 'Setup.Core.psm1', 'Software.json')
+if ($Gui) { $NeededFiles += 'Install-MyPC.Gui.ps1' }
 
 function Get-StagingBase {
     # Prefer ProgramData: survives UAC elevation to a different admin account.
@@ -117,9 +131,22 @@ try {
     }
     $scriptPath = Join-Path $WorkDir 'Install-MyPC.ps1'
     $configPath = Join-Path $WorkDir 'Software.json'
+    $modulePath = Join-Path $WorkDir 'Setup.Core.psm1'
     $scriptInfo = Get-Item -LiteralPath $scriptPath
     if ($scriptInfo.Length -lt 1024) {
         throw "Downloaded Install-MyPC.ps1 looks wrong (only $($scriptInfo.Length) bytes)."
+    }
+    $moduleInfo = Get-Item -LiteralPath $modulePath
+    if ($moduleInfo.Length -lt 4096) {
+        throw "Downloaded Setup.Core.psm1 looks wrong (only $($moduleInfo.Length) bytes)."
+    }
+
+    if ($Gui) {
+        $scriptPath = Join-Path $WorkDir 'Install-MyPC.Gui.ps1'
+        $guiInfo = Get-Item -LiteralPath $scriptPath
+        if ($guiInfo.Length -lt 4096) {
+            throw "Downloaded Install-MyPC.Gui.ps1 looks wrong (only $($guiInfo.Length) bytes)."
+        }
     }
 
     Write-Host "Running $scriptPath ..." -ForegroundColor Cyan

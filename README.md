@@ -17,11 +17,46 @@ On any PC with internet, open PowerShell and run:
 irm https://tinyurl.com/27wv3wmc | iex
 ```
 
+Prefer a real window instead of the console menu? Same command, one flag:
+
+```powershell
+$env:SETUP_GUI=1; irm https://tinyurl.com/27wv3wmc | iex
+```
+
+---
+
+## 🪟 Window mode (GUI)
+
+Both front-ends do exactly the same things; pick whichever you prefer.
+
+- **Console:** `Run-Setup.bat` or the one-liner above.
+- **Window:** `Run-Setup-Gui.bat`, or `.\Install-MyPC.Gui.ps1`, or the `SETUP_GUI=1` one-liner.
+
+The window has five tabs:
+
+| Tab | What you can do |
+|-----|-----------------|
+| **Software** | Filter the list, tick applications, then **Install selected**. Each row shows `Ready`, `Will download`, `File missing`, `Installing...`, `Installed`, `Installed (restart)`, `Skipped` or `Failed`. |
+| **Printers** | Pick a manufacturer, type the IP/hostname, port and optional name, then **Install printer**. The right-hand list shows installed printers and lets you rename one. |
+| **Users** | Rename a local account, change its password, or add/remove group membership. The only enabled administrator is marked `LAST ADMIN - LOCKED` and cannot be changed. |
+| **Account** | Enable the built-in Administrator (password typed twice, never stored), or rename the account you are signed in with. |
+| **Log** | Live progress from the current install, with **Copy**, **Open folder** and **Clear**. |
+
+Notes:
+
+- **Nothing to install.** The window uses WPF and Windows PowerShell 5.1, both part of Windows 10 and 11. No PowerShell 7, no .NET download, no Python.
+- **English or French, automatically.** The window follows the Windows display language: French on a French PC, English everywhere else. Set `SETUP_UI_LANG=en` or `SETUP_UI_LANG=fr` before launching to force one. Log lines stay in English, like the console log. French text is written without accented characters so the scripts remain plain ASCII and safe on any Windows code page.
+- **Same elevation.** The window relaunches itself with UAC on start, and still passes the original user's SID, so "rename signed-in user" targets the right account.
+- **The window never freezes.** Installs run in a background runspace; a **Cancel** button appears in the status bar while something is running.
+- **Logs:** `Logs\gui-YYYYMMDD-HHMMSS.log`, one per window session.
+- The GUI does **not** write `Software.json` — it is read-only. Edit the file by hand to change the catalog.
+- Closing the window during an install asks for confirmation; a child installer (winget, msiexec) may keep running in the background.
+
 ---
 
 ## ✨ What it does
 
-When you run the tool you get a main menu with 4 actions:
+When you run the console version you get a main menu; the window version exposes the same actions as tabs.
 
 | # | Action | Description |
 |---|--------|-------------|
@@ -77,8 +112,8 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
      git clone https://github.com/baddimehamad/windows-install-script.git
      ```
 2. **(Optional) Add Office:** copy your `OfficeSetup.exe` next to `Install-MyPC.ps1` (same folder as `Run-Setup.bat`).
-3. **Run:** double-click **`Run-Setup.bat`** → approve the UAC prompt.
-4. **Choose:** enter e.g. `6` to run everything, or `1,3` for Administrator + software only.
+3. **Run:** double-click **`Run-Setup.bat`** (console) or **`Run-Setup-Gui.bat`** (window) → approve the UAC prompt.
+4. **Choose:** enter e.g. `6` to run everything, or `1,3` for Administrator + software only. In the window, pick a tab and use its buttons.
    - If you chose option 1, type `YES`/`OUI` (any case: yes, Yes, oui...) to confirm, then enter a new password when asked (minimum 8 characters), then confirm it. Leave blank to cancel.
 5. **Pick software:** enter numbers like `1,3,5`, or `A` for all, or `0` to skip.
 6. **Done:** check the summary at the end. If anything failed, open the `Logs` folder.
@@ -100,7 +135,7 @@ Want your own memorable word? Paste the full URL into https://tinyurl.com and cr
 
 </details>
 
-This downloads 2 small files (`Install-MyPC.ps1` + `Software.json`, ~60 KB) to a staging folder and starts the setup. Approve the UAC prompt when it appears.
+This downloads 3 small files (`Install-MyPC.ps1`, `Setup.Core.psm1` + `Software.json`, ~100 KB) to a staging folder and starts the setup. Add `Setup-Online.ps1 -Gui` (or set `$env:SETUP_GUI=1`) to also download and open the window version. Approve the UAC prompt when it appears.
 
 > Note: local-only files are not downloaded up front: `OfficeSetup.exe` and `Installers/` content show `FILE NOT FOUND` unless they carry a `Url` (downloaded on demand, e.g. French Office, Chrome fallback) or you copy them in manually. Printer driver folders (`Drivers/`) **are fetched automatically on demand** into `C:\ProgramData\Windows_Auto_Setup_Online\Drivers` the first time you install a printer (cached for later runs). Winget apps work normally.
 
@@ -135,9 +170,12 @@ Software numbers: 1,3,5
 
 ```text
 windows-install-script/
-├── Run-Setup.bat      ← double-click this to start
-├── Install-MyPC.ps1   ← main PowerShell script (auto-elevates to admin)
-├── Setup-Online.ps1   ← web launcher for `irm ... | iex` (downloads repo ZIP, then runs Install-MyPC.ps1)
+├── Run-Setup.bat      ← double-click to start (console menu)
+├── Run-Setup-Gui.bat  ← double-click to start (window)
+├── Install-MyPC.ps1   ← console front-end (auto-elevates to admin)
+├── Install-MyPC.Gui.ps1 ← window front-end (auto-elevates to admin)
+├── Setup.Core.psm1    ← shared logic used by both front-ends
+├── Setup-Online.ps1   ← web launcher for `irm ... | iex`
 ├── Software.json      ← edit this to add/remove apps
 ├── Installers/        ← optional folder for your own .exe / .msi files
 │   └── README.txt
@@ -146,8 +184,11 @@ windows-install-script/
 └── Logs/              ← created automatically, one log per run
 ```
 
-- **`Run-Setup.bat`** — launcher that runs the PowerShell script with bypassed execution policy and pauses so you can read the result.
-- **`Install-MyPC.ps1`** — does all the work: elevation, account changes, Winget installs, local installer launches, logging.
+- **`Run-Setup.bat`** — launcher that runs the console script with bypassed execution policy and pauses so you can read the result.
+- **`Run-Setup-Gui.bat`** — launcher for the window version; it starts detached, so no console window stays open.
+- **`Install-MyPC.ps1`** — console front-end: prompts, menus and colours.
+- **`Install-MyPC.Gui.ps1`** — window front-end (WPF, embedded XAML).
+- **`Setup.Core.psm1`** — every action (Winget, local installers, printers, users, Administrator). Both front-ends call it, so a fix applies to both. It never prompts and never writes to the console.
 - **`Software.json`** — the only file you normally need to edit.
 
 ---
@@ -312,8 +353,11 @@ Safety: if only one enabled administrator is left on the PC, its group membershi
 | Printer: no driver presets | Enable entries in `PrinterDrivers` in `Software.json`, or type an `.inf` path when asked. |
 | Password change rejected | Windows complexity policy may have refused it (or the account is not local). Try a longer password with mixed case, digits and symbols. |
 | New username doesn't show | Sign out and back in, or restart. |
+| Window doesn't open | The window needs WPF, which is part of Windows 10/11. Check `Logs\gui-*.log`; if the file is empty, run `powershell.exe -Sta -File .\Install-MyPC.Gui.ps1` from a console to see the error. |
+| Window opens behind other windows | Approve the UAC prompt first: the elevated window cannot take focus while UAC is waiting. Click the taskbar entry if needed. |
+| GUI install does nothing | Check the **Log** tab: a task that never starts usually means a missing `Setup.Core.psm1` next to `Install-MyPC.Gui.ps1`. |
 
-Logs are in `Logs\setup-YYYYMMDD-HHMMSS.log` (transcript of the whole run).
+Logs are in `Logs\setup-YYYYMMDD-HHMMSS.log` for the console and `Logs\gui-YYYYMMDD-HHMMSS.log` for the window.
 
 ---
 
