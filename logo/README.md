@@ -64,6 +64,7 @@ white rows.
 | `winrar.png` | [WinRAR icon](https://commons.wikimedia.org/wiki/File:WinRAR_icon.svg) |
 | `naps2.png` | [cyanfish/naps2 favicon.ico](https://github.com/cyanfish/naps2/blob/master/NAPS2.Lib/Icons/favicon.ico) |
 | `windows-scan.png` | [Windows Scan Store listing](https://apps.microsoft.com/detail/9wzdncrfj3pv); white glyph placed on a blue tile for contrast |
+| `orbitconvert.png` | [AbdlrhmanDev/OrbitConvert icon](https://github.com/AbdlrhmanDev/OrbitConvert/blob/main/assets/icons/orbitconvert-256.png) |
 
 ## Trademarks
 

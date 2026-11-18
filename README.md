@@ -78,7 +78,7 @@ You can also combine options, e.g. `1,3`.
 
 ### 📦 Default software list
 
-All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/), except Office:
+All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/), except the local installers:
 
 1. Google Chrome
 2. Mozilla Firefox
@@ -92,8 +92,11 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
 10. Zoom Workplace
 11. WhatsApp
 12. LibreOffice
-13. Microsoft Office (`OfficeSetup.exe` — you provide the file, see below)
-14. Microsoft Office Home Business 2024 (Français) — auto-downloaded from Microsoft (~7 MB Click-to-Run setup)
+13. WinRAR
+14. NAPS2
+15. Windows Scan (Microsoft Store)
+16. Microsoft Office Home Business 2024 (Français) — auto-downloaded from Microsoft (~7 MB Click-to-Run setup)
+17. OrbitConvert — auto-downloaded from GitHub releases (~92 MB per-user MSI)
 
 > The numbers are generated from entries with `"Enabled": true` in `Software.json`. Disable/add an entry and the numbers shift automatically.
 
@@ -384,6 +387,26 @@ The shipped entry downloads the French Microsoft 365 / Office Home & Business 20
 - To use a different Office edition, change `ProductreleaseID` and `language` in the URL (or point `Path` at your own `OfficeSetup.exe`). The installer also needs `MatchName` if its registered name differs from `Name`.
 - The script launches it as-is. Unattended install depends on your specific Office installer.
 - Activation still needs a valid license / Microsoft 365 account — this script does not bypass licensing.
+
+### OrbitConvert
+
+OrbitConvert has no Winget package, so the shipped entry downloads its MSI from GitHub releases:
+
+```json
+{
+  "Name": "OrbitConvert",
+  "Path": "Installers\\OrbitConvert-0.3.7-win-x64.msi",
+  "MatchName": "OrbitConvert",
+  "Url": "https://github.com/AbdlrhmanDev/OrbitConvert/releases/download/v0.3.7/OrbitConvert-0.3.7-win-x64.msi",
+  "Arguments": ["/qn", "/norestart"],
+  "Enabled": true
+}
+```
+
+- The download (~92 MB) is cached at `Path` and reused on later runs.
+- The MSI installs per-user and does not require administrator rights. OrbitConvert updates itself from **Settings → Updates**, so the catalog reports `Manual` for this entry like any other local installer.
+- Release file names contain the version. To ship a newer build, change both `Path` and `Url` to the matching asset; Windows on ARM can use the `win-arm64.msi` release.
+- Releases are unsigned for now, so SmartScreen may warn about an unknown publisher.
 
 ### 🖨️ Printers (option 4)
 
