@@ -576,6 +576,35 @@ function Invoke-EditUserGroups {
     }
 }
 
+function Invoke-SetUserEnabled {
+    $users = @(Show-LocalUserList)
+    if ($users.Count -eq 0) { return }
+    $account = Select-LocalUserByNumber -Users $users -Prompt 'User number to enable/disable / Numero (0 = cancel)'
+    if ($null -eq $account) { return }
+
+    if ($account.Enabled -and $account.IsSoleAdmin) {
+        Write-Host ("Cannot disable '{0}': it is the only enabled administrator on this PC." -f $account.Name) -ForegroundColor Red
+        Write-Host 'Impossible : dernier administrateur actif. Activez-en un autre d''abord.' -ForegroundColor Red
+        return
+    }
+    if ($account.Enabled -and -not [string]::IsNullOrWhiteSpace($script:OriginalUserSid) -and ($account.SID -eq $script:OriginalUserSid)) {
+        Write-Host ("Cannot disable '{0}': it is the account you are signed in with." -f $account.Name) -ForegroundColor Red
+        Write-Host 'Utilisez un autre compte administrateur pour le desactiver.' -ForegroundColor Red
+        return
+    }
+
+    $newState = -not $account.Enabled
+    $verb = if ($newState) { 'enable' } else { 'disable' }
+    $currentState = if ($account.Enabled) { 'enabled' } else { 'disabled' }
+    $answer = ((Read-Host ("'{0}' is currently {1}. Type {2} to {2} it, or press Enter to cancel / Tapez {2}" -f $account.Name, $currentState, $verb)) | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    if ($answer -ne $verb) {
+        Write-Host 'Account state change cancelled.' -ForegroundColor DarkYellow
+        return
+    }
+
+    Show-Result (Set-SetupLocalUserEnabled -UserName $account.Name -Enabled $newState -ProtectedSid $script:OriginalUserSid)
+}
+
 function Show-UserMenu {
     if (-not (Get-Command Get-LocalUser -ErrorAction SilentlyContinue)) {
         Write-Host 'Local user cmdlets are not available on this Windows edition.' -ForegroundColor Red
@@ -588,6 +617,7 @@ function Show-UserMenu {
         Write-Host '  2. Rename a user'
         Write-Host "  3. Change a user's password"
         Write-Host "  4. Change a user's groups (member of)"
+        Write-Host '  5. Enable or disable a user'
         Write-Host '  0. Back to main menu / Retour'
         $sub = ((Read-Host 'Users option') | ForEach-Object { "$_".Trim() })
         if ($sub -match '^(?i:0|q|quit|exit|b|back)$' -or [string]::IsNullOrWhiteSpace($sub)) {
@@ -598,7 +628,8 @@ function Show-UserMenu {
             '2' { Invoke-RenameLocalUser }
             '3' { Invoke-SetLocalUserPassword }
             '4' { Invoke-EditUserGroups }
-            default { Write-Host 'Invalid users option. Use 1, 2, 3, 4, or 0.' -ForegroundColor Yellow }
+            '5' { Invoke-SetUserEnabled }
+            default { Write-Host 'Invalid users option. Use 1, 2, 3, 4, 5, or 0.' -ForegroundColor Yellow }
         }
     }
 }
@@ -621,7 +652,7 @@ try {
         Write-Host '  2. Rename the currently signed-in local user account'
         Write-Host '  3. Choose software to install from a numbered list'
         Write-Host '  4. Printers (install / list / rename)'
-        Write-Host '  5. Users (list / rename / password / groups)'
+        Write-Host '  5. Users (list / rename / password / groups / enable-disable)'
         Write-Host '  6. Run all options (1+2+3+4+5)'
         Write-Host '  0. Exit / Quitter'
         Write-Host ''

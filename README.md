@@ -40,7 +40,7 @@ The window has five tabs:
 |-----|-----------------|
 | **Software** | Filter the list, tick applications, then **Install selected**. **Check versions and updates** fills the *Installed version* and *Available update* columns from Windows and Winget, and refreshes the *Install version* dropdown on every unpinned Winget-source entry; each dropdown also has a small recycle icon that reloads just that application's versions. The update column shows `Up to date`, `Pinned`, `Manual`, `Unknown` or the newer version. Select installed apps to **Update selected** (Winget only) or **Uninstall selected** (after a confirmation). Each row shows the application logo, the `WINGET`/`LOCAL` badge and a status such as `Ready`, `Not installed`, `Installed`, `Update available`, `Installing...`, `Installed (restart)`, `Skipped`, `Updated`, `Uninstalled` or `Failed`. |
 | **Printers** | Pick a manufacturer, type the IP/hostname, port and optional name, then **Install printer**. The right-hand list shows installed printers and lets you rename one. |
-| **Users** | Rename a local account, change its password, or add/remove group membership. The only enabled administrator is marked `LAST ADMIN - LOCKED` and cannot be changed. |
+| **Users** | Rename a local account, change its password, add/remove group membership, or enable/disable it. The only enabled administrator is marked `LAST ADMIN - LOCKED` and cannot be changed or disabled; the account you are signed in with cannot be disabled either. |
 | **Account** | Enable the built-in Administrator (password typed twice, never stored), or rename the account you are signed in with. |
 | **Log** | Live progress from the current install, with **Copy**, **Open folder** and **Clear**. |
 
@@ -68,7 +68,7 @@ When you run the console version you get a main menu; the window version exposes
 | 2 | **Rename current local user** | Renames the local account you were signed in with (name + display name). Does **not** rename `C:\Users\OldName`. |
 | 3 | **Install software** | Shows a numbered list from `Software.json`. Install only what you pick, e.g. `1,3,5`, or `A` for all, `0` to skip. |
 | 4 | **Printers** | Submenu: install a printer (pick manufacturer, then IP/hostname, port, name), list installed printers (driver, port, status, default), or rename any printer. |
-| 5 | **Users** | Submenu: list local users (with member-of groups), rename any user, change any user's password, or change group membership (add/remove, e.g. Administrators). The only enabled administrator is fully locked: its group membership cannot be changed at all. |
+| 5 | **Users** | Submenu: list local users (with member-of groups), rename any user, change any user's password, change group membership (add/remove, e.g. Administrators), or enable/disable an account (files and password are kept). The only enabled administrator is fully locked: its group membership cannot be changed and it cannot be disabled; the account you are signed in with cannot be disabled either. |
 | 6 | **Run all** | Runs 1 + 2 + 3 + 4 + 5 in order. |
 | 0 | **Exit** | Exit without further changes. |
 
@@ -439,9 +439,9 @@ Driver presets live in the `PrinterDrivers` array in `Software.json`. The curren
 
 ### Manage local users (option 5)
 
-Option 5 opens a submenu: **1 = list** all local users (enabled state + member-of groups), **2 = rename** any user (same 20-char/character rules, profile folder untouched), **3 = change password** (hidden input, min 8 chars, must confirm), **4 = groups** (pick a user, then add to or remove from any local group — groups are listed by their real localized names, e.g. `Administrateurs` on French Windows).
+Option 5 opens a submenu: **1 = list** all local users (enabled state + member-of groups), **2 = rename** any user (same 20-char/character rules, profile folder untouched), **3 = change password** (hidden input, min 8 chars, must confirm), **4 = groups** (pick a user, then add to or remove from any local group — groups are listed by their real localized names, e.g. `Administrateurs` on French Windows), **5 = enable or disable** a user (the account flag only: profile, files and password are kept, and the user can sign in again once re-enabled). The window exposes the same action as an **Enable**/**Disable** button on each row.
 
-Safety: if only one enabled administrator is left on the PC, its group membership is completely frozen — the script refuses any change to it (no override). Create or enable another admin first.
+Safety: if only one enabled administrator is left on the PC, its group membership and its enabled state are completely frozen — the script refuses any change to it (no override). The account you are signed in with can never be disabled from this session either, so a mistaken click cannot lock you out. Create or enable another admin, and disable the other account from a different administrator session.
 
 ---
 

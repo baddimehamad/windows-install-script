@@ -1507,6 +1507,105 @@ function Get-LocalUserInventory {
     return $items
 }
 
+function Set-SetupLocalUserEnabled {
+    <#
+    .SYNOPSIS
+        Enables or disables a local user account.
+    .DESCRIPTION
+        Only changes the account flag: the profile, files and password are
+        left untouched. Two cases are refused for safety: disabling the last
+        enabled administrator, and disabling the account that launched the
+        setup (ProtectedSid, or the current process identity when omitted).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$UserName,
+        [Parameter(Mandatory = $true)][bool]$Enabled,
+        [string]$ProtectedSid = ''
+    )
+
+    $account = Get-LocalUser -Name $UserName -ErrorAction SilentlyContinue
+    if ($null -eq $account) {
+        $message = ("Local user '{0}' was not found." -f $UserName)
+        Write-SetupLog -Level Error -Message $message
+        return New-SetupResult -Name $UserName -Success $false -Message $message
+    }
+
+    $state = if ($Enabled) { 'enabled' } else { 'disabled' }
+    if ([bool]$account.Enabled -eq $Enabled) {
+        $message = ("'{0}' is already {1}." -f $UserName, $state)
+        Write-SetupLog -Level Info -Message $message
+        return New-SetupResult -Name $UserName -Success $true -Skipped $true -Message $message
+    }
+
+    if (-not $Enabled) {
+        # Disabling the only enabled administrator would make the PC
+        # unrecoverable, so it is refused before touching the account.
+        $enabledAdminSids = @()
+        try {
+            $adminGroup = @(Get-LocalGroup -ErrorAction Stop | Where-Object {
+                $null -ne $_.SID -and $_.SID.Value -match '-544$'
+            } | Select-Object -First 1)
+            if ($adminGroup.Count -ge 1) {
+                foreach ($member in @(Get-LocalGroupMember -Group $adminGroup[0].Name -ErrorAction SilentlyContinue)) {
+                    if ($member.ObjectClass -ne 'User') { continue }
+                    $memberUser = Get-LocalUser -SID $member.SID -ErrorAction SilentlyContinue
+                    if ($null -ne $memberUser -and $memberUser.Enabled) {
+                        $enabledAdminSids += $memberUser.SID.Value
+                    }
+                }
+            }
+        } catch {}
+        if (($enabledAdminSids.Count -eq 1) -and ($enabledAdminSids[0] -eq $account.SID.Value)) {
+            $message = ("'{0}' is the only enabled administrator on this PC. Enable or create another administrator before disabling this account." -f $UserName)
+            Write-SetupLog -Level Warning -Message $message
+            return New-SetupResult -Name $UserName -Success $false -Message $message
+        }
+
+        $protected = $ProtectedSid
+        if ([string]::IsNullOrWhiteSpace($protected)) {
+            try { $protected = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value } catch {}
+        }
+        if ((-not [string]::IsNullOrWhiteSpace($protected)) -and ($null -ne $account.SID) -and ($account.SID.Value -eq $protected)) {
+            $message = ("'{0}' is the account you are signed in with. Disable it from another administrator account." -f $UserName)
+            Write-SetupLog -Level Warning -Message $message
+            return New-SetupResult -Name $UserName -Success $false -Message $message
+        }
+    }
+
+    Write-SetupLog -Level Task -Message ("{0} local account '{1}'." -f $(if ($Enabled) { 'Enabling' } else { 'Disabling' }), $UserName)
+    try {
+        if ($Enabled) {
+            Enable-LocalUser -Name $UserName -ErrorAction Stop
+        } else {
+            Disable-LocalUser -Name $UserName -ErrorAction Stop
+        }
+        $message = ("Account '{0}' is now {1}." -f $UserName, $state)
+        Write-SetupLog -Level Success -Message $message
+        return New-SetupResult -Name $UserName -Success $true -Message $message
+    } catch {
+        # Fallback for editions where the LocalUser cmdlets are unavailable.
+        Write-SetupLog -Level Warning -Message ("LocalUser cmdlet failed ({0}), trying 'net user' fallback..." -f $_.Exception.Message)
+        try {
+            $flag = if ($Enabled) { '/active:yes' } else { '/active:no' }
+            $netOutput = & net user $UserName $flag 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+                throw ("net user exited with code {0}. {1}" -f $LASTEXITCODE, $netOutput.Trim())
+            }
+            $check = Get-LocalUser -Name $UserName -ErrorAction SilentlyContinue
+            if (($null -ne $check) -and ([bool]$check.Enabled -ne $Enabled)) {
+                throw 'the account state did not change'
+            }
+            $message = ("Account '{0}' is now {1}." -f $UserName, $state)
+            Write-SetupLog -Level Success -Message $message
+            return New-SetupResult -Name $UserName -Success $true -Message $message
+        } catch {
+            $message = ("Could not {0} '{1}': {2}" -f $(if ($Enabled) { 'enable' } else { 'disable' }), $UserName, $_.Exception.Message)
+            Write-SetupLog -Level Error -Message $message
+            return New-SetupResult -Name $UserName -Success $false -Message $message
+        }
+    }
+}
+
 function Get-LocalGroupNames {
     try {
         return @(Get-LocalGroup -ErrorAction Stop | Sort-Object Name | Select-Object -ExpandProperty Name)
@@ -2097,6 +2196,7 @@ Export-ModuleMember -Function @(
     'Rename-SetupLocalAccount',
     'Set-SetupLocalAccountPassword',
     'Get-LocalUserInventory',
+    'Set-SetupLocalUserEnabled',
     'Get-LocalGroupNames',
     'Get-SoleAdminLock',
     'Add-SetupLocalGroupMember',

@@ -197,7 +197,7 @@ $script:StringTable = @{
     'Printers.Title2'           = @{ en = "Printer"; fr = "Imprimante" }
 
     'Users.Title'               = @{ en = "Users"; fr = "Utilisateurs" }
-    'Users.Subtitle'            = @{ en = "Rename a local account, change its password, or edit its group membership. The last enabled administrator is protected."; fr = "Renommez un compte local, changez son mot de passe ou ses groupes. Le dernier administrateur actif est protege." }
+    'Users.Subtitle'            = @{ en = "Rename a local account, change its password, edit its group membership, or enable/disable it. The last enabled administrator is protected."; fr = "Renommez un compte local, changez son mot de passe, modifiez ses groupes ou activez/desactivez-le. Le dernier administrateur actif est protege." }
     'Users.LocalAccounts'       = @{ en = "Local accounts on this PC"; fr = "Comptes locaux sur ce PC" }
     'Users.Empty'               = @{ en = "No local users found."; fr = "Aucun utilisateur local trouve." }
     'Users.MemberOf'            = @{ en = "Member of: {0}"; fr = "Membre de : {0}" }
@@ -224,6 +224,16 @@ $script:StringTable = @{
     'Users.NotMember'           = @{ en = "'{0}' is not a member of '{1}'."; fr = "'{0}' n'est pas membre de '{1}'." }
     'Users.RenameTask'          = @{ en = "Renaming {0} to {1}"; fr = "Renommage de {0} en {1}" }
     'Users.PasswordTask'        = @{ en = "Changing the password for {0}"; fr = "Changement du mot de passe de {0}" }
+    'Users.Enable'              = @{ en = "Enable"; fr = "Activer" }
+    'Users.Disable'             = @{ en = "Disable"; fr = "Desactiver" }
+    'Users.EnableTitle'         = @{ en = "Enable user"; fr = "Activer l'utilisateur" }
+    'Users.DisableTitle'        = @{ en = "Disable user"; fr = "Desactiver l'utilisateur" }
+    'Users.EnableTask'          = @{ en = "Enabling {0}"; fr = "Activation de {0}" }
+    'Users.DisableTask'         = @{ en = "Disabling {0}"; fr = "Desactivation de {0}" }
+    'Users.EnableConfirm'       = @{ en = "Enable the local account '{0}'?{1}{1}It will be able to sign in again."; fr = "Activer le compte local '{0}' ?{1}{1}Il pourra a nouveau se connecter." }
+    'Users.DisableConfirm'      = @{ en = "Disable the local account '{0}'?{1}{1}Its files and password are kept, but it cannot sign in until it is enabled again."; fr = "Desactiver le compte local '{0}' ?{1}{1}Ses fichiers et son mot de passe sont conserves, mais il ne pourra plus se connecter avant d'etre reactive." }
+    'Users.CurrentAccountLock'  = @{ en = "This is the account you are signed in with. Disable it from another administrator account."; fr = "C'est le compte utilise pour la session. Desactivez-le depuis un autre compte administrateur." }
+    'Users.LastAdminLock'       = @{ en = "The last enabled administrator cannot be disabled."; fr = "Le dernier administrateur actif ne peut pas etre desactive." }
 
     'Account.Title'             = @{ en = "Account"; fr = "Compte" }
     'Account.Subtitle'          = @{ en = "Enable the built-in Administrator account, or rename the account you are signed in with."; fr = "Activez le compte administrateur integre, ou renommez le compte utilise pour la session." }
@@ -2284,9 +2294,34 @@ function Refresh-Users {
         $groupsButton.Content = Get-UiText 'Users.Groups'
         $groupsButton.Style = $script:Window.Resources['SecondaryButton']
         $groupsButton.Padding = [System.Windows.Thickness]::new(11, 5, 11, 5)
+        $groupsButton.Margin = [System.Windows.Thickness]::new(0, 0, 6, 0)
         $groupsButton.Tag = $user.Name
         $groupsButton.Add_Click({ param($sender, $e) Show-GroupDialog -UserName ([string]$sender.Tag) })
         [void]$buttons.Children.Add($groupsButton)
+
+        $toggleButton = [System.Windows.Controls.Button]::new()
+        $toggleButton.Content = if ($user.Enabled) { Get-UiText 'Users.Disable' } else { Get-UiText 'Users.Enable' }
+        $toggleButton.Style = $script:Window.Resources['SecondaryButton']
+        $toggleButton.Padding = [System.Windows.Thickness]::new(11, 5, 11, 5)
+        $toggleButton.Tag = [pscustomobject]@{ Name = $user.Name; Enable = (-not $user.Enabled) }
+        $toggleButton.Add_Click({
+            param($sender, $e)
+            $target = $sender.Tag
+            Invoke-UserEnabledToggle -UserName ([string]$target.Name) -Enable ([bool]$target.Enable)
+        })
+        $lockReason = ''
+        if ($user.Enabled -and $user.IsSoleAdmin) {
+            $toggleButton.IsEnabled = $false
+            $lockReason = Get-UiText 'Users.LastAdminLock'
+        } elseif ($user.Enabled -and -not [string]::IsNullOrWhiteSpace($script:OriginalUserSid) -and ($user.SID -eq $script:OriginalUserSid)) {
+            $toggleButton.IsEnabled = $false
+            $lockReason = Get-UiText 'Users.CurrentAccountLock'
+        }
+        if (-not [string]::IsNullOrWhiteSpace($lockReason)) {
+            $toggleButton.ToolTip = $lockReason
+            [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($toggleButton, $true)
+        }
+        [void]$buttons.Children.Add($toggleButton)
 
         [System.Windows.Controls.Grid]::SetColumn($buttons, 1)
         [void]$grid.Children.Add($buttons)
@@ -2318,6 +2353,29 @@ function Invoke-UserPasswordDialog {
     if ($null -eq $secure) { return }
     Start-SetupTask -Label ((Get-UiText 'Users.PasswordTask') -f $UserName) `
         -Command 'Set-SetupLocalAccountPassword' -Parameters @{ UserName = $UserName; Password = $secure } -OnComplete 'Complete-UserAction'
+}
+
+function Invoke-UserEnabledToggle {
+    param(
+        [Parameter(Mandatory = $true)][string]$UserName,
+        [Parameter(Mandatory = $true)][bool]$Enable
+    )
+    if ($script:Busy) { return }
+
+    if ($Enable) {
+        $title = Get-UiText 'Users.EnableTitle'
+        $confirm = (Get-UiText 'Users.EnableConfirm') -f $UserName, "`r`n"
+        $label = (Get-UiText 'Users.EnableTask') -f $UserName
+    } else {
+        $title = Get-UiText 'Users.DisableTitle'
+        $confirm = (Get-UiText 'Users.DisableConfirm') -f $UserName, "`r`n"
+        $label = (Get-UiText 'Users.DisableTask') -f $UserName
+    }
+    if (-not (Show-Confirm $confirm $title)) { return }
+
+    Start-SetupTask -Label $label -Command 'Set-SetupLocalUserEnabled' `
+        -Parameters @{ UserName = $UserName; Enabled = $Enable; ProtectedSid = $script:OriginalUserSid } `
+        -OnComplete 'Complete-UserAction'
 }
 
 function Complete-UserAction {
