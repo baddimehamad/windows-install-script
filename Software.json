@@ -122,6 +122,14 @@
       "Enabled": true
     },
     {
+      "Name": "PuTTY",
+      "Type": "winget",
+      "Id": "PuTTY.PuTTY",
+      "VersionPicker": true,
+      "Logo": "logo/putty.png",
+      "Enabled": true
+    },
+    {
       "Name": "Windows Scan",
       "Type": "winget",
       "Source": "msstore",

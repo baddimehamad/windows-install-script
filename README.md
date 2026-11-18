@@ -94,9 +94,10 @@ All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-man
 12. LibreOffice
 13. WinRAR
 14. NAPS2
-15. Windows Scan (Microsoft Store)
-16. Microsoft Office Home Business 2024 (Français) — auto-downloaded from Microsoft (~7 MB Click-to-Run setup)
-17. OrbitConvert — auto-downloaded from GitHub releases (~92 MB per-user MSI)
+15. PuTTY
+16. Windows Scan (Microsoft Store)
+17. Microsoft Office Home Business 2024 (Français) — auto-downloaded from Microsoft (~7 MB Click-to-Run setup)
+18. OrbitConvert — auto-downloaded from GitHub releases (~92 MB per-user MSI)
 
 > The numbers are generated from entries with `"Enabled": true` in `Software.json`. Disable/add an entry and the numbers shift automatically.
 

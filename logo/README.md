@@ -63,6 +63,7 @@ white rows.
 | `microsoft-office.png` | [Microsoft 365 (2022)](https://commons.wikimedia.org/wiki/File:Microsoft_365_(2022).svg) |
 | `winrar.png` | [WinRAR icon](https://commons.wikimedia.org/wiki/File:WinRAR_icon.svg) |
 | `naps2.png` | [cyanfish/naps2 favicon.ico](https://github.com/cyanfish/naps2/blob/master/NAPS2.Lib/Icons/favicon.ico) |
+| `putty.png` | [PuTTY Icon upstream](https://commons.wikimedia.org/wiki/File:PuTTY_Icon_upstream.svg) (MIT, Simon Tatham and contributors) |
 | `windows-scan.png` | [Windows Scan Store listing](https://apps.microsoft.com/detail/9wzdncrfj3pv); white glyph placed on a blue tile for contrast |
 | `orbitconvert.png` | [AbdlrhmanDev/OrbitConvert icon](https://github.com/AbdlrhmanDev/OrbitConvert/blob/main/assets/icons/orbitconvert-256.png) |
 
