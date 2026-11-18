@@ -66,6 +66,23 @@ white rows.
 | `putty.png` | [PuTTY Icon upstream](https://commons.wikimedia.org/wiki/File:PuTTY_Icon_upstream.svg) (MIT, Simon Tatham and contributors) |
 | `windows-scan.png` | [Windows Scan Store listing](https://apps.microsoft.com/detail/9wzdncrfj3pv); white glyph placed on a blue tile for contrast |
 | `orbitconvert.png` | [AbdlrhmanDev/OrbitConvert icon](https://github.com/AbdlrhmanDev/OrbitConvert/blob/main/assets/icons/orbitconvert-256.png) |
+| `brave.png` | [Brave app icon](https://brave.com/) |
+| `everything.png` | [Everything (software) logo](https://commons.wikimedia.org/wiki/File:Everything_(software)_logo.png) |
+| `sumatrapdf.png` | [Sumatra PDF logo](https://commons.wikimedia.org/wiki/File:Sumatra_PDF_logo.svg) |
+| `sharex.png` | [ShareX/ShareX logo](https://github.com/ShareX/ShareX/blob/master/ShareX.HelpersLib/Resources/ShareX_Logo.png) |
+| `keepassxc.png` | [KeePassXC icon](https://github.com/keepassxreboot/keepassxc/blob/develop/share/icons/application/256x256/apps/keepassxc.png) |
+| `bitwarden.png` | [Bitwarden icon](https://bitwarden.com/) |
+| `crystaldiskinfo.png` | [CrystalDiskInfo](https://crystalmark.info/en/software/crystaldiskinfo/) (vendor favicon) |
+| `hwinfo.png` | [HWiNFO](https://www.hwinfo.com/) (vendor favicon) |
+| `rufus.png` | [pbatard/rufus Store icon](https://github.com/pbatard/rufus/blob/master/res/appstore/Images/Square44x44Logo.targetsize-256.png) |
+| `anydesk.png` | [AnyDesk](https://anydesk.com/) (vendor favicon) |
+| `tailscale.png` | [tailscale/tailscale Synology package icon](https://github.com/tailscale/tailscale/blob/main/release/dist/synology/files/PACKAGE_ICON_256.PNG) |
+| `slack.png` | [Slack Logo Icon](https://commons.wikimedia.org/wiki/File:Slack_Logo_Icon.svg) |
+| `visual-cpp.png` | Icon tile created for this project: `C++` text on a Visual Studio purple tile |
+| `dotnet-desktop-runtime.png` | [Microsoft .NET logo](https://commons.wikimedia.org/wiki/File:Microsoft_.NET_logo.svg) |
+| `webview2.png` | [Microsoft Edge logo (2019)](https://commons.wikimedia.org/wiki/File:Microsoft_Edge_logo_(2019).svg) |
+| `directx.png` | [Microsoft DirectX logo](https://commons.wikimedia.org/wiki/File:Microsoft-DirectX-Logo-wordmark.svg) |
+| `temurin.png` | [Adoptium icon](https://adoptium.net/) |
 
 ## Trademarks
 

@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     WPF front-end for Windows Automatic Setup.
@@ -30,7 +30,7 @@
 #>
 param(
     [string]$OriginalUserSid,
-    [ValidateSet('Software', 'Printers', 'Users', 'Account', 'Log')][string]$StartPage = 'Software',
+    [ValidateSet('Software', 'System', 'Printers', 'Users', 'Account', 'Log')][string]$StartPage = 'Software',
     [switch]$NoElevate,
     [switch]$NoShow
 )
@@ -117,6 +117,7 @@ $script:StringTable = @{
     'App.ConsoleMissing'        = @{ en = "Install-MyPC.ps1 was not found next to this window, so the console menu cannot start."; fr = "Install-MyPC.ps1 est introuvable a cote de cette fenetre : le menu texte ne peut pas demarrer." }
 
     'Nav.Software'              = @{ en = "Software"; fr = "Logiciels" }
+    'Nav.System'                = @{ en = "System"; fr = "Systeme" }
     'Nav.Printers'              = @{ en = "Printers"; fr = "Imprimantes" }
     'Nav.Users'                 = @{ en = "Users"; fr = "Utilisateurs" }
     'Nav.Account'               = @{ en = "Account"; fr = "Compte" }
@@ -145,6 +146,28 @@ $script:StringTable = @{
     'Software.VersionTooltip'   = @{ en = "Version used by 'Install selected'. 'Latest' follows the newest release published by winget. Use the refresh icon beside this list to reload it, or the check button for every application."; fr = "Version utilisee par 'Installer la selection'. 'Derniere' suit la version la plus recente publiee par winget. Utilisez l'icone d'actualisation a cote de cette liste pour la recharger, ou le bouton de verification pour toutes les applications." }
     'Software.VersionStale'     = @{ en = "The selected version {0} is no longer listed by winget; it is kept so the choice does not change silently."; fr = "La version selectionnee {0} n'est plus listee par winget ; elle est conservee pour que le choix ne change pas silencieusement." }
     'Software.RefreshVersions'  = @{ en = "Refresh versions for this application"; fr = "Actualiser les versions de cette application" }
+    'Software.CategoryAll'      = @{ en = "All categories"; fr = "Toutes les categories" }
+    'Software.CategoryLabel'    = @{ en = "Category"; fr = "Categorie" }
+    'Software.ProfileAll'      = @{ en = "All profiles"; fr = "Tous les profils" }
+    'Software.ProfileLabel'    = @{ en = "Profile"; fr = "Profil" }
+    'Software.ProfileApplied'  = @{ en = "Profile '{0}': {1} application(s) selected."; fr = "Profil '{0}' : {1} application(s) selectionnee(s)." }
+    'Software.PreviewTitle'    = @{ en = "Confirm installation"; fr = "Confirmer l'installation" }
+    'Software.PreviewIntro'    = @{ en = "The following {0} item(s) will be installed:"; fr = "Les {0} element(s) suivants seront installes :" }
+    'Software.PreviewRestore'  = @{ en = "Create a System Restore point before installing"; fr = "Creer un point de restauration avant l'installation" }
+    'Software.PreviewRestoreHint' = @{ en = "Recommended for drivers and system components. It can take a minute."; fr = "Recommande pour les pilotes et composants systeme. Cela peut prendre une minute." }
+    'Software.PreviewProceed'  = @{ en = "Install"; fr = "Installer" }
+    'Software.RestoreTask'     = @{ en = "Creating a System Restore point..."; fr = "Creation d'un point de restauration..." }
+    'Software.RestoreCreated'  = @{ en = "System Restore point created."; fr = "Point de restauration cree." }
+    'Software.RestoreSkipped'  = @{ en = "The restore point was skipped; installation will continue."; fr = "Le point de restauration a ete ignore ; l'installation continue." }
+    'Software.PreflightBlocked' = @{ en = "Preflight checks found a blocking problem. No installation was started."; fr = "Les verifications prealables ont trouve un probleme bloquant. Aucune installation n'a demarre." }
+    'Software.Preflight'        = @{ en = "Preflight checks"; fr = "Verifications prealables" }
+    'Software.PreflightTitle'   = @{ en = "Preflight checks"; fr = "Verifications prealables" }
+    'Software.PreflightSummary' = @{ en = "{0} check(s): {1} passed, {2} warning(s), {3} blocking."; fr = "{0} verification(s) : {1} reussie(s), {2} avertissement(s), {3} bloquante(s)." }
+    'Software.PreflightReady'   = @{ en = "No blocking problem was found. Installation can start."; fr = "Aucun probleme bloquant detecte. L'installation peut demarrer." }
+    'Software.ExportReport'     = @{ en = "Export report"; fr = "Exporter le rapport" }
+    'Software.ReportTitle'      = @{ en = "Export report"; fr = "Exporter le rapport" }
+    'Software.ReportDone'       = @{ en = "The report was written to:{0}{0}{1}"; fr = "Le rapport a ete ecrit dans :{0}{0}{1}" }
+    'Software.ReportEmpty'      = @{ en = "No task has run yet. The report will still contain the system information."; fr = "Aucune tache n'a encore ete executee. Le rapport contiendra quand meme les informations systeme." }
     'Versions.Refreshing'       = @{ en = "Refreshing versions for {0} ..."; fr = "Actualisation des versions de {0} ..." }
     'Versions.Refreshed'        = @{ en = "{0}: {1} version(s) loaded."; fr = "{0} : {1} version(s) chargee(s)." }
     'Versions.RefreshFailed'    = @{ en = "Could not refresh versions for {0}; the existing list is kept."; fr = "Impossible d'actualiser les versions de {0} ; la liste existante est conservee." }
@@ -335,13 +358,195 @@ $script:StringTable = @{
     'Uninstall.FinishedLog'     = @{ en = "Software uninstall finished: {0} uninstalled, {1} failed, {2} skipped."; fr = "Desinstallation terminee : {0} desinstalles, {1} en echec, {2} ignores." }
     'Uninstall.CancelledRest'   = @{ en = "The remaining items were not uninstalled because the task was cancelled."; fr = "Les elements restants n'ont pas ete desinstalles (tache annulee)." }
 
+    'System.Title'              = @{ en = "System status"; fr = "Etat du systeme" }
+    'System.Subtitle'           = @{ en = "Read-only overview of Windows Update, security, storage, network, power and optional features. Nothing is changed from this page."; fr = "Vue d'ensemble en lecture seule : Windows Update, securite, stockage, reseau, alimentation et fonctionnalites. Rien n'est modifie depuis cette page." }
+    'System.CheckUpdates'       = @{ en = "Check for updates"; fr = "Rechercher les mises a jour" }
+    'System.Export'             = @{ en = "Export report"; fr = "Exporter le rapport" }
+    'System.Refreshing'         = @{ en = "Reading the system status..."; fr = "Lecture de l'etat du systeme..." }
+    'System.CheckingUpdates'    = @{ en = "Checking Windows Update. This can take several minutes..."; fr = "Recherche de Windows Update. Cela peut prendre plusieurs minutes..." }
+    'System.Loaded'             = @{ en = "Updated {0}"; fr = "Mis a jour : {0}" }
+    'System.NotLoaded'          = @{ en = "Status not loaded. Press Refresh."; fr = "Etat non charge. Cliquez sur Actualiser." }
+    'System.SummaryOk'          = @{ en = "No warning detected. {0}"; fr = "Aucun avertissement. {0}" }
+    'System.SummaryWarn'        = @{ en = "{0} warning(s), {1} error(s). {2}"; fr = "{0} avertissement(s), {1} erreur(s). {2}" }
+    'System.NoResult'           = @{ en = "The system status did not return a result."; fr = "L'etat du systeme n'a renvoye aucun resultat." }
+    'System.ExportTitle'        = @{ en = "System report"; fr = "Rapport systeme" }
+    'System.ExportDone'         = @{ en = "The system report was written to:{0}{0}{1}"; fr = "Le rapport systeme a ete ecrit ici :{0}{0}{1}" }
+    'System.ExportEmpty'        = @{ en = "The system status is not loaded yet."; fr = "L'etat du systeme n'est pas encore charge." }
+    'System.CheckFailed'        = @{ en = "The Windows Update check failed: {0}"; fr = "La recherche Windows Update a echoue : {0}" }
+
+    'System.Section.Overview'      = @{ en = "Overview"; fr = "Vue d'ensemble" }
+    'System.Section.WindowsUpdate' = @{ en = "Windows Update"; fr = "Windows Update" }
+    'System.Section.Security'      = @{ en = "Security"; fr = "Securite" }
+    'System.Section.Storage'       = @{ en = "Storage"; fr = "Stockage" }
+    'System.Section.Network'       = @{ en = "Network"; fr = "Reseau" }
+    'System.Section.Power'         = @{ en = "Power"; fr = "Alimentation" }
+    'System.Section.Features'      = @{ en = "Windows features"; fr = "Fonctionnalites Windows" }
+
+    'System.Row.ComputerName'   = @{ en = "Computer name"; fr = "Nom de l'ordinateur" }
+    'System.Row.User'           = @{ en = "Signed-in user"; fr = "Utilisateur connecte" }
+    'System.Row.Windows'        = @{ en = "Windows"; fr = "Windows" }
+    'System.Row.Machine'        = @{ en = "Manufacturer / model"; fr = "Fabricant / modele" }
+    'System.Row.Domain'         = @{ en = "Domain / workgroup"; fr = "Domaine / groupe de travail" }
+    'System.Row.Cpu'            = @{ en = "Processor"; fr = "Processeur" }
+    'System.Row.CpuCores'       = @{ en = "Processor cores"; fr = "Coeurs du processeur" }
+    'System.Row.CpuThreads'     = @{ en = "Logical processors"; fr = "Processeurs logiques" }
+    'System.Row.Ram'            = @{ en = "Memory"; fr = "Memoire" }
+    'System.Row.Uptime'         = @{ en = "Uptime"; fr = "Temps de fonctionnement" }
+    'System.Row.PendingRestart' = @{ en = "Pending restart"; fr = "Redemarrage en attente" }
+    'System.Row.Admin'          = @{ en = "Administrator session"; fr = "Session administrateur" }
+    'System.Row.PowerShell'     = @{ en = "PowerShell"; fr = "PowerShell" }
+    'System.Row.Winget'         = @{ en = "Winget"; fr = "Winget" }
+    'System.Row.UpdateService'  = @{ en = "Windows Update service"; fr = "Service Windows Update" }
+    'System.Row.LastSearch'     = @{ en = "Last update search"; fr = "Derniere recherche" }
+    'System.Row.LastInstall'    = @{ en = "Last update install"; fr = "Derniere installation" }
+    'System.Row.Paused'         = @{ en = "Updates paused"; fr = "Mises a jour suspendues" }
+    'System.Row.AvailableUpdates' = @{ en = "Available updates"; fr = "Mises a jour disponibles" }
+    'System.Row.DriverUpdates'  = @{ en = "Driver updates"; fr = "Mises a jour de pilotes" }
+    'System.Row.Defender'       = @{ en = "Defender antivirus"; fr = "Antivirus Defender" }
+    'System.Row.RealTime'       = @{ en = "Real-time protection"; fr = "Protection en temps reel" }
+    'System.Row.Signature'      = @{ en = "Antivirus signatures"; fr = "Signatures antivirus" }
+    'System.Row.FirewallDomain' = @{ en = "Firewall (domain)"; fr = "Pare-feu (domaine)" }
+    'System.Row.FirewallPrivate' = @{ en = "Firewall (private)"; fr = "Pare-feu (prive)" }
+    'System.Row.FirewallPublic' = @{ en = "Firewall (public)"; fr = "Pare-feu (public)" }
+    'System.Row.SecureBoot'     = @{ en = "Secure Boot"; fr = "Demarrage securise" }
+    'System.Row.Tpm'            = @{ en = "TPM"; fr = "TPM" }
+    'System.Row.TpmReady'       = @{ en = "TPM ready"; fr = "TPM pret" }
+    'System.Row.BitLocker'      = @{ en = "BitLocker (system drive)"; fr = "BitLocker (disque systeme)" }
+    'System.Row.Uac'            = @{ en = "User Account Control"; fr = "Controle de compte utilisateur" }
+    'System.Row.Activation'     = @{ en = "Windows activation"; fr = "Activation de Windows" }
+    'System.Row.Storage'        = @{ en = "Storage"; fr = "Stockage" }
+    'System.Row.Internet'       = @{ en = "Internet access"; fr = "Acces Internet" }
+    'System.Row.Adapter'        = @{ en = "Active adapter"; fr = "Carte reseau active" }
+    'System.Row.PowerPlan'      = @{ en = "Power plan"; fr = "Mode d'alimentation" }
+    'System.Row.Battery'        = @{ en = "Battery charge"; fr = "Charge de la batterie" }
+    'System.Row.BatteryState'   = @{ en = "Battery state"; fr = "Etat de la batterie" }
+    'System.Row.Hibernate'      = @{ en = "Hibernation"; fr = "Mise en veille prolongee" }
+    'System.Row.FastStartup'    = @{ en = "Fast startup"; fr = "Demarrage rapide" }
+    'System.Row.FeatureNetFx3'  = @{ en = ".NET Framework 3.5"; fr = ".NET Framework 3.5" }
+    'System.Row.FeatureWsl'     = @{ en = "Windows Subsystem for Linux"; fr = "Sous-systeme Windows pour Linux" }
+    'System.Row.FeatureVmPlatform' = @{ en = "Virtual Machine Platform"; fr = "Plateforme de machine virtuelle" }
+    'System.Row.FeatureHyperV'  = @{ en = "Hyper-V"; fr = "Hyper-V" }
+    'System.Row.FeatureSandbox' = @{ en = "Windows Sandbox"; fr = "Bac a sable Windows" }
+    'System.Row.LongPaths'      = @{ en = "Long path support"; fr = "Prise en charge des chemins longs" }
+    'System.Row.DeveloperMode'  = @{ en = "Developer Mode"; fr = "Mode developpeur" }
+
+    'System.Value.On'           = @{ en = "On"; fr = "Active" }
+    'System.Value.Off'          = @{ en = "Off"; fr = "Desactive" }
+    'System.Value.Running'      = @{ en = "Running"; fr = "En cours" }
+    'System.Value.Stopped'      = @{ en = "Stopped"; fr = "Arrete" }
+    'System.Value.Protected'    = @{ en = "Protected"; fr = "Protege" }
+    'System.Value.Unprotected'  = @{ en = "Unprotected"; fr = "Non protege" }
+    'System.Value.Activated'    = @{ en = "Activated"; fr = "Active" }
+    'System.Value.NotActivated' = @{ en = "Not activated"; fr = "Non active" }
+    'System.Value.Healthy'      = @{ en = "Healthy"; fr = "Sain" }
+    'System.Value.Warning'      = @{ en = "Warning"; fr = "Avertissement" }
+    'System.Value.Unhealthy'    = @{ en = "Unhealthy"; fr = "Defaillant" }
+    'System.Value.Connected'    = @{ en = "Connected"; fr = "Connecte" }
+    'System.Value.NotConnected' = @{ en = "No Internet"; fr = "Pas d'acces Internet" }
+    'System.Value.Present'      = @{ en = "Present"; fr = "Present" }
+    'System.Value.NotPresent'   = @{ en = "Not present"; fr = "Absent" }
+    'System.Value.Ready'        = @{ en = "Ready"; fr = "Pret" }
+    'System.Value.NotReady'     = @{ en = "Not ready"; fr = "Non pret" }
+    'System.Value.Yes'          = @{ en = "Yes"; fr = "Oui" }
+    'System.Value.No'           = @{ en = "No"; fr = "Non" }
+    'System.Value.Never'        = @{ en = "Never"; fr = "Jamais" }
+    'System.Value.NotPaused'    = @{ en = "Not paused"; fr = "Non suspendues" }
+    'System.Value.CheckNotRun'  = @{ en = "Not checked"; fr = "Non verifie" }
+    'System.Value.UpToDate'     = @{ en = "Up to date"; fr = "A jour" }
+    'System.Value.NotChecked'   = @{ en = "Not checked"; fr = "Non verifie" }
+    'System.Value.Unknown'      = @{ en = "Unknown"; fr = "Inconnu" }
+    'System.Value.NotAvailable' = @{ en = "Not available"; fr = "Non disponible" }
+    'System.Value.AcPower'      = @{ en = "On AC power"; fr = "Sur secteur" }
+    'System.Value.Charging'     = @{ en = "Charging"; fr = "En charge" }
+    'System.Value.Discharging'  = @{ en = "Discharging"; fr = "Sur batterie" }
+    'System.Value.FullyCharged' = @{ en = "Fully charged"; fr = "Charge complete" }
+    'System.Value.BatteryLow'   = @{ en = "Low"; fr = "Faible" }
+    'System.Value.BatteryCritical' = @{ en = "Critical"; fr = "Critique" }
+
+    'System.Actions'            = @{ en = "Maintenance actions"; fr = "Actions de maintenance" }
+    'System.ActionsHint'        = @{ en = "Every action asks for confirmation and is written to the log."; fr = "Chaque action demande une confirmation et est ecrite dans le journal." }
+    'System.ActionTitle'        = @{ en = "System maintenance"; fr = "Maintenance du systeme" }
+    'System.Action.Applying'    = @{ en = "Applying the system change..."; fr = "Application du changement..." }
+
+    'System.Power.Title'        = @{ en = "Power"; fr = "Alimentation" }
+    'System.Power.Plan'         = @{ en = "Power plan"; fr = "Mode d'alimentation" }
+    'System.Power.Enabled'      = @{ en = "Enabled"; fr = "Active" }
+    'System.Power.Apply'        = @{ en = "Apply power settings"; fr = "Appliquer l'alimentation" }
+    'System.Power.Confirm'      = @{ en = "Apply these power settings?{0}{0}Plan: {1}{0}Hibernation: {2}{0}Fast startup: {3}"; fr = "Appliquer ces reglages d'alimentation ?{0}{0}Mode : {1}{0}Veille prolongee : {2}{0}Demarrage rapide : {3}" }
+    'System.Power.Applying'     = @{ en = "Applying power settings..."; fr = "Application de l'alimentation..." }
+    'System.Power.NoPlan'       = @{ en = "No power plan was found."; fr = "Aucun mode d'alimentation trouve." }
+
+    'System.Plan.Balanced'      = @{ en = "Balanced"; fr = "Equilibre" }
+    'System.Plan.HighPerformance' = @{ en = "High performance"; fr = "Performances elevees" }
+    'System.Plan.PowerSaver'    = @{ en = "Power saver"; fr = "Economiseur d'energie" }
+
+    'System.Network.Title'      = @{ en = "Network"; fr = "Reseau" }
+    'System.Network.Adapter'    = @{ en = "Adapter"; fr = "Carte reseau" }
+    'System.Network.Dns'        = @{ en = "DNS preset"; fr = "Preset DNS" }
+    'System.Network.ApplyDns'   = @{ en = "Apply DNS"; fr = "Appliquer le DNS" }
+    'System.Network.Flush'      = @{ en = "Flush DNS cache"; fr = "Vider le cache DNS" }
+    'System.Network.Flushing'   = @{ en = "Flushing the DNS cache..."; fr = "Vidage du cache DNS..." }
+    'System.Network.Target'     = @{ en = "Host or IP"; fr = "Hote ou IP" }
+    'System.Network.Test'       = @{ en = "Test connection"; fr = "Tester la connexion" }
+    'System.Network.Testing'    = @{ en = "Testing the connection..."; fr = "Test de la connexion..." }
+    'System.Network.TestTitle'  = @{ en = "Connection test"; fr = "Test de connexion" }
+    'System.Network.DnsConfirm' = @{ en = "Change the DNS servers of '{0}' to {1}?{2}{2}The previous setting can be restored with the Automatic (DHCP) preset."; fr = "Changer les serveurs DNS de '{0}' pour {1} ?{2}{2}Le reglage precedent peut etre restaure avec le preset Automatique (DHCP)." }
+    'System.Network.NoAdapter'  = @{ en = "No network adapter is available. Refresh the status first."; fr = "Aucune carte reseau disponible. Actualisez d'abord l'etat." }
+    'System.Network.NoTarget'   = @{ en = "Enter a host name or IP address."; fr = "Entrez un nom d'hote ou une adresse IP." }
+
+    'System.Dns.Automatic'      = @{ en = "Automatic (DHCP)"; fr = "Automatique (DHCP)" }
+    'System.Dns.Cloudflare'     = @{ en = "Cloudflare (1.1.1.1)"; fr = "Cloudflare (1.1.1.1)" }
+    'System.Dns.Google'         = @{ en = "Google (8.8.8.8)"; fr = "Google (8.8.8.8)" }
+    'System.Dns.Quad9'          = @{ en = "Quad9 (9.9.9.9)"; fr = "Quad9 (9.9.9.9)" }
+
+    'System.Storage.Title'      = @{ en = "Storage"; fr = "Stockage" }
+    'System.Storage.Sense'      = @{ en = "Storage Sense"; fr = "Storage Sense" }
+    'System.Storage.ApplySense' = @{ en = "Apply Storage Sense"; fr = "Appliquer Storage Sense" }
+    'System.Storage.SenseConfirm' = @{ en = "Turn Storage Sense {0}?"; fr = "Activer Storage Sense : {0} ?" }
+    'System.Storage.Analyze'    = @{ en = "Analyze temp files"; fr = "Analyser les fichiers temporaires" }
+    'System.Storage.Clean'      = @{ en = "Clean temp files"; fr = "Nettoyer les fichiers temporaires" }
+    'System.Storage.CleanConfirm' = @{ en = "Delete temporary files older than {0} day(s) from your temp folder and Windows Temp?{1}{1}Locked files are skipped."; fr = "Supprimer les fichiers temporaires de plus de {0} jour(s) du dossier temporaire et de Windows Temp ?{1}{1}Les fichiers verrouilles sont ignores." }
+    'System.Storage.Analyzing'  = @{ en = "Analyzing temporary files..."; fr = "Analyse des fichiers temporaires..." }
+    'System.Storage.Cleaning'   = @{ en = "Cleaning temporary files..."; fr = "Nettoyage des fichiers temporaires..." }
+    'System.Storage.PreviewTitle' = @{ en = "Temporary files"; fr = "Fichiers temporaires" }
+
+    'System.TimeZone.Title'     = @{ en = "Time zone"; fr = "Fuseau horaire" }
+    'System.TimeZone.Label'     = @{ en = "Time zone"; fr = "Fuseau horaire" }
+    'System.TimeZone.Apply'     = @{ en = "Apply time zone"; fr = "Appliquer le fuseau" }
+    'System.TimeZone.Confirm'   = @{ en = "Change the time zone to {0}?"; fr = "Changer le fuseau horaire pour {0} ?" }
+    'System.TimeZone.Applying'  = @{ en = "Changing the time zone..."; fr = "Changement du fuseau horaire..." }
+
+    'System.Row.TimeZone'       = @{ en = "Time zone"; fr = "Fuseau horaire" }
+    'System.Row.StorageSense'   = @{ en = "Storage Sense"; fr = "Storage Sense" }
+
     # Keys used only by the window code, not by the XAML.
     'Common.TaskFailed'         = @{ en = "The task failed."; fr = "La tache a echoue." }
     'Common.RenameButton'       = @{ en = "Rename"; fr = "Renommer" }
     'Common.SeeLog'             = @{ en = "See the Log tab for details."; fr = "Voir l'onglet Journal pour les details." }
     'Printers.DefaultBadge'     = @{ en = "DEFAULT"; fr = "PAR DEFAUT" }
     'Printers.Detail'           = @{ en = "Driver: {0}  |  Port: {1}  |  Status: {2}"; fr = "Pilote : {0}  |  Port : {1}  |  Etat : {2}" }
+    'Printers.SetDefault'       = @{ en = "Set default"; fr = "Par defaut" }
+    'Printers.TestPage'         = @{ en = "Test page"; fr = "Page de test" }
+    'Printers.DefaultTask'      = @{ en = "Setting {0} as the default printer"; fr = "Definition de {0} comme imprimante par defaut" }
+    'Printers.TestTask'         = @{ en = "Sending a test page to {0}"; fr = "Envoi d'une page de test a {0}" }
     'Users.PasswordMismatch'    = @{ en = "The passwords do not match."; fr = "Les mots de passe ne correspondent pas." }
+    'Users.Create'              = @{ en = "Create user"; fr = "Creer un utilisateur" }
+    'Users.CreateTitle'         = @{ en = "Create a local user"; fr = "Creer un utilisateur local" }
+    'Users.CreateNameLabel'     = @{ en = "Account name (1-20 characters)"; fr = "Nom du compte (1-20 caracteres)" }
+    'Users.CreatePasswordLabel' = @{ en = "Password (minimum 8 characters)"; fr = "Mot de passe (8 caracteres minimum)" }
+    'Users.CreateConfirmLabel'  = @{ en = "Confirm password"; fr = "Confirmez le mot de passe" }
+    'Users.CreateAdmin'         = @{ en = "Add to the Administrators group"; fr = "Ajouter au groupe Administrateurs" }
+    'Users.CreateAdminHint'     = @{ en = "Standard accounts are safer for daily use. Administrator accounts can change any setting on this PC."; fr = "Les comptes standard sont plus surs au quotidien. Un compte administrateur peut modifier tous les reglages du PC." }
+    'Users.CreateNeverExpires'  = @{ en = "Password never expires"; fr = "Le mot de passe n'expire jamais" }
+    'Users.CreateRestore'       = @{ en = "Create a System Restore point first"; fr = "Creer d'abord un point de restauration" }
+    'Users.CreateButton'        = @{ en = "Create"; fr = "Creer" }
+    'Users.CreateTask'          = @{ en = "Creating the local user {0}"; fr = "Creation de l'utilisateur local {0}" }
+    'Users.Delete'              = @{ en = "Delete"; fr = "Supprimer" }
+    'Users.DeleteTitle'         = @{ en = "Delete user"; fr = "Supprimer l'utilisateur" }
+    'Users.DeleteConfirm'       = @{ en = "Delete the local account '{0}'?{1}{1}The account is removed. Its profile folder and files are kept. This cannot be undone without a restore point or backup."; fr = "Supprimer le compte local '{0}' ?{1}{1}Le compte est supprime. Son dossier de profil et ses fichiers sont conserves. Cette action est irreversible sans point de restauration ni sauvegarde." }
+    'Users.DeleteRestore'       = @{ en = "Create a System Restore point before deleting"; fr = "Creer un point de restauration avant la suppression" }
+    'Users.DeleteTask'          = @{ en = "Deleting the local user {0}"; fr = "Suppression de l'utilisateur local {0}" }
+    'Users.BuiltInLock'         = @{ en = "The built-in Administrator account cannot be deleted here."; fr = "Le compte administrateur integre ne peut pas etre supprime ici." }
 }
 
 $script:Ui = @{}
@@ -628,6 +833,7 @@ $xaml = @'
           </Grid.RowDefinitions>
           <StackPanel Grid.Row="0">
             <RadioButton x:Name="NavSoftware" Style="{StaticResource NavButton}" GroupName="Nav" Content="@@Nav.Software@@"/>
+            <RadioButton x:Name="NavSystem" Style="{StaticResource NavButton}" GroupName="Nav" Content="@@Nav.System@@"/>
             <RadioButton x:Name="NavPrinters" Style="{StaticResource NavButton}" GroupName="Nav" Content="@@Nav.Printers@@"/>
             <RadioButton x:Name="NavUsers" Style="{StaticResource NavButton}" GroupName="Nav" Content="@@Nav.Users@@"/>
             <RadioButton x:Name="NavAccount" Style="{StaticResource NavButton}" GroupName="Nav" Content="@@Nav.Account@@"/>
@@ -646,6 +852,7 @@ $xaml = @'
         <!-- ============================ SOFTWARE ============================ -->
         <Grid x:Name="PageSoftware">
           <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -668,7 +875,24 @@ $xaml = @'
             <Button x:Name="SoftwareSelectAll" Grid.Column="2" Content="@@Software.SelectAll@@" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
             <Button x:Name="SoftwareSelectNone" Grid.Column="3" Content="@@Common.Clear@@" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
           </Grid>
-          <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
+          <Grid Grid.Row="2" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="190"/>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="190"/>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="@@Software.CategoryLabel@@" FontSize="12.5" Foreground="#5F6B76" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <ComboBox x:Name="SoftwareCategory" Grid.Column="1" Height="30" FontSize="12.5" VerticalAlignment="Center" DisplayMemberPath="Label"/>
+            <TextBlock Grid.Column="2" Text="@@Software.ProfileLabel@@" FontSize="12.5" Foreground="#5F6B76" VerticalAlignment="Center" Margin="16,0,8,0"/>
+            <ComboBox x:Name="SoftwareProfile" Grid.Column="3" Height="30" FontSize="12.5" VerticalAlignment="Center" DisplayMemberPath="Label"/>
+            <Button x:Name="SoftwarePreflightButton" Grid.Column="5" Content="@@Software.Preflight@@" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
+            <Button x:Name="SoftwareReportButton" Grid.Column="6" Content="@@Software.ExportReport@@" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
+          </Grid>
+          <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -699,7 +923,7 @@ $xaml = @'
               </ScrollViewer>
             </Grid>
           </Border>
-          <Grid Grid.Row="3" Margin="0,14,0,0">
+          <Grid Grid.Row="4" Margin="0,14,0,0">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
@@ -712,6 +936,87 @@ $xaml = @'
             </StackPanel>
           </Grid>
         </Grid>
+
+        <!-- ============================= SYSTEM ============================= -->
+        <ScrollViewer x:Name="PageSystem" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+          <StackPanel>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                <TextBlock Text="@@System.Title@@" Style="{StaticResource PageTitle}"/>
+                <TextBlock Text="@@System.Subtitle@@" Style="{StaticResource PageSubtitle}"/>
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="SystemRefreshButton" Content="@@Common.Refresh@@" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                <Button x:Name="SystemUpdateButton" Content="@@System.CheckUpdates@@" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                <Button x:Name="SystemExportButton" Content="@@System.Export@@" Style="{StaticResource SecondaryButton}"/>
+              </StackPanel>
+            </Grid>
+            <TextBlock x:Name="SystemSummary" Text="@@System.NotLoaded@@" Margin="0,16,0,0" FontSize="12.5"
+                       Foreground="#5F6B76" TextWrapping="Wrap"/>
+            <WrapPanel x:Name="SystemSections" Margin="0,12,0,0"/>
+            <TextBlock Text="@@System.Actions@@" FontWeight="SemiBold" FontSize="15" Margin="0,10,0,2"/>
+            <TextBlock Text="@@System.ActionsHint@@" Style="{StaticResource PageSubtitle}" Margin="0,0,0,10"/>
+            <WrapPanel x:Name="SystemActions">
+              <Border Style="{StaticResource Card}" Width="380" Margin="0,0,14,14">
+                <StackPanel>
+                  <TextBlock Text="@@System.Power.Title@@" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6"/>
+                  <TextBlock Text="@@System.Power.Plan@@" Style="{StaticResource FieldLabel}"/>
+                  <ComboBox x:Name="SystemPowerPlan" Height="30" FontSize="12.5" Margin="0,0,0,4"
+                            DisplayMemberPath="Text" SelectedValuePath="Value"/>
+                  <CheckBox x:Name="SystemHibernate" Content="@@System.Power.Enabled@@" FontSize="12.5" Margin="0,4,0,2"/>
+                  <CheckBox x:Name="SystemFastStartup" Content="@@System.Power.Enabled@@" FontSize="12.5" Margin="0,2,0,10"/>
+                  <Button x:Name="SystemPowerApply" Content="@@System.Power.Apply@@" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left"/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Card}" Width="380" Margin="0,0,14,14">
+                <StackPanel>
+                  <TextBlock Text="@@System.Network.Title@@" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6"/>
+                  <TextBlock Text="@@System.Network.Adapter@@" Style="{StaticResource FieldLabel}"/>
+                  <ComboBox x:Name="SystemAdapter" Height="30" FontSize="12.5" Margin="0,0,0,4"/>
+                  <TextBlock Text="@@System.Network.Dns@@" Style="{StaticResource FieldLabel}"/>
+                  <ComboBox x:Name="SystemDnsPreset" Height="30" FontSize="12.5" Margin="0,0,0,10"
+                            DisplayMemberPath="Text" SelectedValuePath="Value"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button x:Name="SystemDnsApply" Content="@@System.Network.ApplyDns@@" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                    <Button x:Name="SystemDnsFlush" Content="@@System.Network.Flush@@" Style="{StaticResource SecondaryButton}"/>
+                  </StackPanel>
+                  <TextBlock Text="@@System.Network.Target@@" Style="{StaticResource FieldLabel}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="SystemNetworkTarget" Grid.Column="0" Style="{StaticResource FieldBox}" Text="1.1.1.1"/>
+                    <Button x:Name="SystemNetworkTest" Grid.Column="1" Content="@@System.Network.Test@@" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
+                  </Grid>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Card}" Width="380" Margin="0,0,14,14">
+                <StackPanel>
+                  <TextBlock Text="@@System.Storage.Title@@" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6"/>
+                  <CheckBox x:Name="SystemStorageSense" Content="@@System.Power.Enabled@@" FontSize="12.5" Margin="0,4,0,8"/>
+                  <Button x:Name="SystemStorageSenseApply" Content="@@System.Storage.ApplySense@@" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+                  <StackPanel Orientation="Horizontal">
+                    <Button x:Name="SystemTempAnalyze" Content="@@System.Storage.Analyze@@" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"/>
+                    <Button x:Name="SystemTempClean" Content="@@System.Storage.Clean@@" Style="{StaticResource SecondaryButton}"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Card}" Width="380" Margin="0,0,14,14">
+                <StackPanel>
+                  <TextBlock Text="@@System.TimeZone.Title@@" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,6"/>
+                  <TextBlock Text="@@System.TimeZone.Label@@" Style="{StaticResource FieldLabel}"/>
+                  <ComboBox x:Name="SystemTimeZone" Height="30" FontSize="12.5" Margin="0,0,0,10" MaxDropDownHeight="240"/>
+                  <Button x:Name="SystemTimeZoneApply" Content="@@System.TimeZone.Apply@@" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left"/>
+                </StackPanel>
+              </Border>
+            </WrapPanel>
+          </StackPanel>
+        </ScrollViewer>
 
         <!-- ============================ PRINTERS ============================ -->
         <Grid x:Name="PagePrinters" Visibility="Collapsed">
@@ -792,7 +1097,10 @@ $xaml = @'
           </StackPanel>
           <Grid Grid.Row="1" Margin="0,18,0,12">
             <TextBlock Text="@@Users.LocalAccounts@@" FontSize="12.5" Foreground="#5F6B76" VerticalAlignment="Center"/>
-            <Button x:Name="UserRefreshButton" Content="@@Common.Refresh@@" HorizontalAlignment="Right" Style="{StaticResource SecondaryButton}"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+              <Button x:Name="UserCreateButton" Content="@@Users.Create@@" Style="{StaticResource PrimaryButton}" Margin="0,0,8,0"/>
+              <Button x:Name="UserRefreshButton" Content="@@Common.Refresh@@" Style="{StaticResource SecondaryButton}"/>
+            </StackPanel>
           </Grid>
           <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -897,16 +1205,39 @@ $script:HeaderSubtitle = Get-Control 'HeaderSubtitle'
 $script:ConsoleModeButton = Get-Control 'ConsoleModeButton'
 $script:ElevationBadge = Get-Control 'ElevationBadge'
 $script:NavSoftware = Get-Control 'NavSoftware'
+$script:NavSystem = Get-Control 'NavSystem'
 $script:NavPrinters = Get-Control 'NavPrinters'
 $script:NavUsers = Get-Control 'NavUsers'
 $script:NavAccount = Get-Control 'NavAccount'
 $script:NavLog = Get-Control 'NavLog'
 $script:NavLogPath = Get-Control 'NavLogPath'
 $script:PageSoftware = Get-Control 'PageSoftware'
+$script:PageSystem = Get-Control 'PageSystem'
 $script:PagePrinters = Get-Control 'PagePrinters'
 $script:PageUsers = Get-Control 'PageUsers'
 $script:PageAccount = Get-Control 'PageAccount'
 $script:PageLog = Get-Control 'PageLog'
+$script:SystemRefreshButton = Get-Control 'SystemRefreshButton'
+$script:SystemUpdateButton = Get-Control 'SystemUpdateButton'
+$script:SystemExportButton = Get-Control 'SystemExportButton'
+$script:SystemSummary = Get-Control 'SystemSummary'
+$script:SystemSections = Get-Control 'SystemSections'
+$script:SystemPowerPlan = Get-Control 'SystemPowerPlan'
+$script:SystemHibernate = Get-Control 'SystemHibernate'
+$script:SystemFastStartup = Get-Control 'SystemFastStartup'
+$script:SystemPowerApply = Get-Control 'SystemPowerApply'
+$script:SystemAdapter = Get-Control 'SystemAdapter'
+$script:SystemDnsPreset = Get-Control 'SystemDnsPreset'
+$script:SystemDnsApply = Get-Control 'SystemDnsApply'
+$script:SystemDnsFlush = Get-Control 'SystemDnsFlush'
+$script:SystemNetworkTarget = Get-Control 'SystemNetworkTarget'
+$script:SystemNetworkTest = Get-Control 'SystemNetworkTest'
+$script:SystemStorageSense = Get-Control 'SystemStorageSense'
+$script:SystemStorageSenseApply = Get-Control 'SystemStorageSenseApply'
+$script:SystemTempAnalyze = Get-Control 'SystemTempAnalyze'
+$script:SystemTempClean = Get-Control 'SystemTempClean'
+$script:SystemTimeZone = Get-Control 'SystemTimeZone'
+$script:SystemTimeZoneApply = Get-Control 'SystemTimeZoneApply'
 $script:SoftwareFilter = Get-Control 'SoftwareFilter'
 $script:SoftwareList = Get-Control 'SoftwareList'
 $script:SoftwareSummary = Get-Control 'SoftwareSummary'
@@ -916,6 +1247,10 @@ $script:SoftwareUninstallButton = Get-Control 'SoftwareUninstallButton'
 $script:SoftwareCheckButton = Get-Control 'SoftwareCheckButton'
 $script:SoftwareSelectAll = Get-Control 'SoftwareSelectAll'
 $script:SoftwareSelectNone = Get-Control 'SoftwareSelectNone'
+$script:SoftwareCategory = Get-Control 'SoftwareCategory'
+$script:SoftwareProfile = Get-Control 'SoftwareProfile'
+$script:SoftwarePreflightButton = Get-Control 'SoftwarePreflightButton'
+$script:SoftwareReportButton = Get-Control 'SoftwareReportButton'
 $script:PrinterMake = Get-Control 'PrinterMake'
 $script:PrinterDriverInfo = Get-Control 'PrinterDriverInfo'
 $script:PrinterHost = Get-Control 'PrinterHost'
@@ -927,6 +1262,7 @@ $script:PrinterInstallButton = Get-Control 'PrinterInstallButton'
 $script:PrinterRefreshButton = Get-Control 'PrinterRefreshButton'
 $script:PrinterList = Get-Control 'PrinterList'
 $script:UserRefreshButton = Get-Control 'UserRefreshButton'
+$script:UserCreateButton = Get-Control 'UserCreateButton'
 $script:UserList = Get-Control 'UserList'
 $script:BuiltInAdminLabel = Get-Control 'BuiltInAdminLabel'
 $script:AdminPassword = Get-Control 'AdminPassword'
@@ -965,6 +1301,10 @@ $script:Queue = @()
 $script:QueueIndex = 0
 $script:QueueTotal = 0
 $script:QueueResults = [System.Collections.Generic.List[object]]::new()
+$script:SessionResults = [System.Collections.Generic.List[object]]::new()
+$script:PendingInstallRows = @()
+$script:PendingInstallRestore = $false
+$script:SoftwareCategoryId = ''
 $script:CurrentRow = $null
 $script:CurrentPS = $null
 $script:CurrentResultBag = $null
@@ -976,6 +1316,9 @@ $script:Busy = $false
 $script:Cancelled = $false
 $script:CloseWhenIdle = $false
 $script:WingetAvailable = $false
+$script:SystemLoaded = $false
+$script:SystemLastDashboard = $null
+$script:SystemExportAfterRefresh = $false
 $script:ActionButtons = @()
 
 function Get-Brush {
@@ -1122,6 +1465,7 @@ function Show-Page {
     param([string]$Name)
     $pages = @{
         Software = $script:PageSoftware
+        System   = $script:PageSystem
         Printers = $script:PagePrinters
         Users    = $script:PageUsers
         Account  = $script:PageAccount
@@ -1131,6 +1475,9 @@ function Show-Page {
         $pages[$key].Visibility = if ($key -eq $Name) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed }
     }
     switch ($Name) {
+        'System' {
+            if (-not $script:SystemLoaded -and -not $script:Busy -and -not $NoShow) { Start-SystemRefresh }
+        }
         'Printers' { Refresh-Printers }
         'Users' { Refresh-Users }
         'Account' { Refresh-Account }
@@ -1457,6 +1804,9 @@ function New-SoftwareRow {
         Name            = $Item.Name
         Detail          = $Item.Detail
         Item            = $Item
+        CategoryId      = [string]$Item.CategoryId
+        CategoryNameEn  = [string]$Item.CategoryNameEn
+        CategoryNameFr  = [string]$Item.CategoryNameFr
         Container       = $container
         CheckBox        = $checkBox
         Version         = $version
@@ -1658,12 +2008,71 @@ function Refresh-SoftwareList {
     Update-SoftwareActions
 }
 
+function Initialize-SoftwareFilters {
+    $script:SoftwareCategory.Items.Clear()
+    $allCategories = [pscustomobject]@{ Id = ''; Label = (Get-UiText 'Software.CategoryAll') }
+    [void]$script:SoftwareCategory.Items.Add($allCategories)
+    $seen = @{}
+    foreach ($row in $script:SoftwareRows) {
+        $id = [string]$row.CategoryId
+        if ([string]::IsNullOrWhiteSpace($id) -or $seen.ContainsKey($id)) { continue }
+        $seen[$id] = $true
+        $label = [string]$row.CategoryNameEn
+        if ($script:Language -eq 'fr' -and -not [string]::IsNullOrWhiteSpace([string]$row.CategoryNameFr)) {
+            $label = [string]$row.CategoryNameFr
+        }
+        [void]$script:SoftwareCategory.Items.Add([pscustomobject]@{ Id = $id; Label = $label })
+    }
+    if ($script:SoftwareCategory.Items.Count -gt 0) { $script:SoftwareCategory.SelectedIndex = 0 }
+
+    $script:SoftwareProfile.Items.Clear()
+    [void]$script:SoftwareProfile.Items.Add([pscustomobject]@{ Id = ''; Label = (Get-UiText 'Software.ProfileAll') })
+    try {
+        foreach ($profile in @(Get-SetupProfiles -Config $script:Config)) {
+            $label = [string]$profile.NameEn
+            if ($script:Language -eq 'fr' -and -not [string]::IsNullOrWhiteSpace([string]$profile.NameFr)) {
+                $label = [string]$profile.NameFr
+            }
+            [void]$script:SoftwareProfile.Items.Add([pscustomobject]@{ Id = $profile.Id; Label = $label; Apps = @($profile.Apps) })
+        }
+    } catch { }
+    if ($script:SoftwareProfile.Items.Count -gt 0) { $script:SoftwareProfile.SelectedIndex = 0 }
+}
+
+function Apply-SoftwareProfile {
+    $profile = $script:SoftwareProfile.SelectedItem
+    if ($null -eq $profile -or [string]::IsNullOrWhiteSpace([string]$profile.Id)) { return }
+    if ($script:SoftwareCategory.Items.Count -gt 0) { $script:SoftwareCategory.SelectedIndex = 0 }
+    $wanted = @($profile.Apps)
+    $count = 0
+    foreach ($row in $script:SoftwareRows) {
+        $match = $false
+        foreach ($candidate in $wanted) {
+            if (([string]$row.Name -eq [string]$candidate) -or ([string]$row.Item.Id -eq [string]$candidate)) {
+                $match = $true
+                break
+            }
+        }
+        $row.CheckBox.IsChecked = $match
+        if ($match) { $count++ }
+    }
+    Add-LogLine -Level Info -Message ((Get-UiText 'Software.ProfileApplied') -f $profile.Label, $count)
+    Update-SoftwareActions
+}
+
 function Apply-SoftwareFilter {
     $query = ([string]$script:SoftwareFilter.Text).Trim()
+    $category = ''
+    if ($null -ne $script:SoftwareCategory.SelectedItem) {
+        $category = [string]$script:SoftwareCategory.SelectedItem.Id
+    }
     foreach ($row in $script:SoftwareRows) {
         $visible = $true
         if (-not [string]::IsNullOrWhiteSpace($query)) {
             $visible = ($row.Name -like "*$query*") -or ($row.Detail -like "*$query*")
+        }
+        if ($visible -and -not [string]::IsNullOrWhiteSpace($category)) {
+            $visible = ([string]$row.CategoryId -eq $category)
         }
         $row.Container.Visibility = if ($visible) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed }
     }
@@ -1822,7 +2231,94 @@ function Start-SoftwareInstall {
         Show-Message (Get-UiText 'Install.NothingText') (Get-UiText 'Install.NothingTitle') 'Warning'
         return
     }
-    Start-SoftwareQueue -Action 'install' -Rows $selected
+    $preview = Show-InstallPreview -Rows $selected
+    if ($null -eq $preview) { return }
+    $script:PendingInstallRows = @($selected)
+    $script:PendingInstallRestore = [bool]$preview.RestorePoint
+    Start-SetupTask -Label (Get-UiText 'Software.Preflight') -Command 'Test-SetupPreflight' `
+        -Parameters @{ SkipInternet = $false } -OnComplete 'Complete-InstallPreflight'
+}
+
+function Complete-InstallPreflight {
+    $result = Get-FirstResult
+    if ($null -ne $result) { [void]$script:SessionResults.Add($result) }
+    if ($null -eq $result -or -not $result.Success) {
+        Add-LogLine -Level Error -Message (Get-UiText 'Software.PreflightBlocked')
+        if ($null -ne $result) {
+            $failing = @($result.Checks | Where-Object { $_.Status -eq 'Fail' })
+            foreach ($check in $failing) {
+                Add-LogLine -Level Error -Message ("{0}: {1}" -f $check.Name, $check.Message)
+            }
+            Show-Message (Get-UiText 'Software.PreflightBlocked') (Get-UiText 'Software.PreflightTitle') 'Warning'
+        }
+        $script:PendingInstallRows = @()
+        $script:PendingInstallRestore = $false
+        return
+    }
+    Add-LogLine -Level Info -Message (Get-UiText 'Software.PreflightReady')
+    if ($script:PendingInstallRestore) {
+        Start-SetupTask -Label (Get-UiText 'Software.RestoreTask') -Command 'New-SetupRestorePoint' `
+            -Parameters @{ Description = (Get-UiText 'Software.PreviewTitle') } -OnComplete 'Complete-InstallRestore'
+        return
+    }
+    $rows = @($script:PendingInstallRows)
+    $script:PendingInstallRows = @()
+    Start-SoftwareQueue -Action 'install' -Rows $rows
+}
+
+function Complete-InstallRestore {
+    $result = Get-FirstResult
+    if ($null -ne $result) { [void]$script:SessionResults.Add($result) }
+    if ($null -ne $result -and $result.Success) {
+        Add-LogLine -Level Success -Message (Get-UiText 'Software.RestoreCreated')
+    } else {
+        Add-LogLine -Level Warning -Message (Get-UiText 'Software.RestoreSkipped')
+    }
+    $rows = @($script:PendingInstallRows)
+    $script:PendingInstallRows = @()
+    Start-SoftwareQueue -Action 'install' -Rows $rows
+}
+
+function Show-PreflightReport {
+    if ($script:Busy) { return }
+    Start-SetupTask -Label (Get-UiText 'Software.Preflight') -Command 'Test-SetupPreflight' `
+        -Parameters @{ SkipInternet = $false } -OnComplete 'Complete-PreflightReport'
+}
+
+function Complete-PreflightReport {
+    $result = Get-FirstResult
+    if ($null -ne $result) { [void]$script:SessionResults.Add($result) }
+    if ($null -eq $result) {
+        Show-Message (Get-UiText 'Common.NoResult') (Get-UiText 'Software.PreflightTitle') 'Warning'
+        return
+    }
+    $lines = [System.Collections.Generic.List[string]]::new()
+    foreach ($check in @($result.Checks)) {
+        [void]$lines.Add(("[{0}] {1}: {2}" -f $check.Status, $check.Name, $check.Message))
+    }
+    $header = (Get-UiText 'Software.PreflightSummary') -f @($result.Checks).Count, (@($result.Checks | Where-Object { $_.Status -eq 'Pass' }).Count), $result.WarnCount, $result.FailCount
+    $text = $header + "`r`n`r`n" + ($lines -join "`r`n")
+    if ($result.Success) { $text = $text + "`r`n`r`n" + (Get-UiText 'Software.PreflightReady') }
+    $icon = if ($result.Success) { 'Information' } else { 'Warning' }
+    Show-Message $text (Get-UiText 'Software.PreflightTitle') $icon
+}
+
+function Export-SoftwareReport {
+    if ($script:Busy) { return }
+    $all = @($script:SessionResults)
+    foreach ($entry in @($script:QueueResults)) { if ($all -notcontains $entry) { $all += $entry } }
+    if ($all.Count -eq 0) {
+        Add-LogLine -Level Info -Message (Get-UiText 'Software.ReportEmpty')
+    }
+    Invoke-UiAction {
+        $result = Export-SetupReport -Results $all -Config $script:Config -Format Html
+        if ($result.Success) {
+            Add-LogLine -Level Success -Message $result.Message
+            Show-Message ((Get-UiText 'Software.ReportDone') -f "`r`n", [string]$result.Data.Path) (Get-UiText 'Software.ReportTitle') 'Information'
+        } else {
+            Show-Message $result.Message (Get-UiText 'Software.ReportTitle') 'Error'
+        }
+    }
 }
 
 function Start-SoftwareUpdate {
@@ -1987,6 +2483,9 @@ function Complete-SoftwareStep {
 
 function Complete-SoftwareRun {
     $action = $script:QueueAction
+    foreach ($entry in @($script:QueueResults)) {
+        if ($null -ne $entry) { [void]$script:SessionResults.Add($entry) }
+    }
     $failed = @($script:QueueResults | Where-Object { -not $_.Success -and -not $_.Skipped })
     $done = @($script:QueueResults | Where-Object { $_.Success -and -not $_.Skipped }).Count
     $skipped = @($script:QueueResults | Where-Object { $_.Skipped }).Count
@@ -2083,6 +2582,29 @@ function Refresh-Printers {
         [System.Windows.Controls.Grid]::SetColumn($stack, 0)
         [void]$grid.Children.Add($stack)
 
+        $actions = [System.Windows.Controls.StackPanel]::new()
+        $actions.Orientation = [System.Windows.Controls.Orientation]::Horizontal
+        $actions.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+
+        $defaultButton = [System.Windows.Controls.Button]::new()
+        $defaultButton.Content = Get-UiText 'Printers.SetDefault'
+        $defaultButton.Style = $script:Window.Resources['SecondaryButton']
+        $defaultButton.Padding = [System.Windows.Thickness]::new(11, 5, 11, 5)
+        $defaultButton.Margin = [System.Windows.Thickness]::new(0, 0, 6, 0)
+        $defaultButton.Tag = $printer.Name
+        $defaultButton.Add_Click({ param($sender, $e) Invoke-SetDefaultPrinter -PrinterName ([string]$sender.Tag) })
+        if ($printer.IsDefault) { $defaultButton.IsEnabled = $false }
+        [void]$actions.Children.Add($defaultButton)
+
+        $testButton = [System.Windows.Controls.Button]::new()
+        $testButton.Content = Get-UiText 'Printers.TestPage'
+        $testButton.Style = $script:Window.Resources['SecondaryButton']
+        $testButton.Padding = [System.Windows.Thickness]::new(11, 5, 11, 5)
+        $testButton.Margin = [System.Windows.Thickness]::new(0, 0, 6, 0)
+        $testButton.Tag = $printer.Name
+        $testButton.Add_Click({ param($sender, $e) Invoke-TestPrinterPage -PrinterName ([string]$sender.Tag) })
+        [void]$actions.Children.Add($testButton)
+
         $renameButton = [System.Windows.Controls.Button]::new()
         $renameButton.Content = Get-UiText 'Common.RenameButton'
         $renameButton.Style = $script:Window.Resources['SecondaryButton']
@@ -2090,8 +2612,10 @@ function Refresh-Printers {
         $renameButton.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
         $renameButton.Tag = $printer.Name
         $renameButton.Add_Click({ param($sender, $e) Invoke-RenamePrinterDialog -PrinterName ([string]$sender.Tag) })
-        [System.Windows.Controls.Grid]::SetColumn($renameButton, 1)
-        [void]$grid.Children.Add($renameButton)
+        [void]$actions.Children.Add($renameButton)
+
+        [System.Windows.Controls.Grid]::SetColumn($actions, 1)
+        [void]$grid.Children.Add($actions)
 
         $container.Child = $grid
         $script:PrinterRows += $container
@@ -2184,6 +2708,7 @@ function Complete-PrinterInstall {
         Refresh-Printers
         return
     }
+    [void]$script:SessionResults.Add($result)
     if ($result.Success) {
         Show-Message $result.Message (Get-UiText 'Printers.Title2') 'Information'
         Refresh-Printers
@@ -2202,6 +2727,33 @@ function Invoke-RenamePrinterDialog {
         Show-Message $result.Message (Get-UiText 'Printers.RenameTitle') $(if ($result.Success) { 'Information' } else { 'Error' })
         Refresh-Printers
     }
+}
+
+function Invoke-SetDefaultPrinter {
+    param([string]$PrinterName)
+    if ($script:Busy) { return }
+    Start-SetupTask -Label ((Get-UiText 'Printers.DefaultTask') -f $PrinterName) `
+        -Command 'Set-SetupDefaultPrinter' -Parameters @{ Name = $PrinterName } -OnComplete 'Complete-PrinterAction'
+}
+
+function Invoke-TestPrinterPage {
+    param([string]$PrinterName)
+    if ($script:Busy) { return }
+    Start-SetupTask -Label ((Get-UiText 'Printers.TestTask') -f $PrinterName) `
+        -Command 'Test-SetupPrinterPage' -Parameters @{ Name = $PrinterName } -OnComplete 'Complete-PrinterAction'
+}
+
+function Complete-PrinterAction {
+    $result = Get-FirstResult
+    if ($null -eq $result) {
+        Show-Message (Get-UiText 'Common.NoResult') (Get-UiText 'Printers.Title2') 'Warning'
+        Refresh-Printers
+        return
+    }
+    [void]$script:SessionResults.Add($result)
+    $icon = if ($result.Success) { 'Information' } else { 'Warning' }
+    Show-Message $result.Message (Get-UiText 'Printers.Title2') $icon
+    Refresh-Printers
 }
 
 # --------------------------------------------------------------------------
@@ -2323,6 +2875,24 @@ function Refresh-Users {
         }
         [void]$buttons.Children.Add($toggleButton)
 
+        $deleteButton = [System.Windows.Controls.Button]::new()
+        $deleteButton.Content = Get-UiText 'Users.Delete'
+        $deleteButton.Style = $script:Window.Resources['SecondaryButton']
+        $deleteButton.Padding = [System.Windows.Thickness]::new(11, 5, 11, 5)
+        $deleteButton.Margin = [System.Windows.Thickness]::new(6, 0, 0, 0)
+        $deleteButton.Tag = $user.Name
+        $deleteButton.Add_Click({ param($sender, $e) Invoke-DeleteUserDialog -UserName ([string]$sender.Tag) })
+        if ($user.SID -match '-500$') {
+            $deleteButton.IsEnabled = $false
+            $deleteButton.ToolTip = Get-UiText 'Users.BuiltInLock'
+            [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($deleteButton, $true)
+        } elseif (-not [string]::IsNullOrWhiteSpace($script:OriginalUserSid) -and ($user.SID -eq $script:OriginalUserSid)) {
+            $deleteButton.IsEnabled = $false
+            $deleteButton.ToolTip = Get-UiText 'Users.CurrentAccountLock'
+            [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($deleteButton, $true)
+        }
+        [void]$buttons.Children.Add($deleteButton)
+
         [System.Windows.Controls.Grid]::SetColumn($buttons, 1)
         [void]$grid.Children.Add($buttons)
 
@@ -2385,9 +2955,39 @@ function Complete-UserAction {
         Refresh-Users
         return
     }
+    [void]$script:SessionResults.Add($result)
     $icon = if ($result.Success) { 'Information' } else { 'Warning' }
     Show-Message $result.Message (Get-UiText 'Users.AccountTitle') $icon
     Refresh-Users
+}
+
+function Invoke-CreateUserDialog {
+    if ($script:Busy) { return }
+    $data = Show-CreateUserDialog
+    if ($null -eq $data) { return }
+    $parameters = @{
+        UserName             = [string]$data.UserName
+        Password             = $data.Password
+        Administrator        = [bool]$data.Administrator
+        PasswordNeverExpires = [bool]$data.PasswordNeverExpires
+    }
+    if ($data.CreateRestorePoint) { $parameters['CreateRestorePoint'] = $true }
+    Start-SetupTask -Label ((Get-UiText 'Users.CreateTask') -f $data.UserName) `
+        -Command 'New-SetupLocalUser' -Parameters $parameters -OnComplete 'Complete-UserAction'
+}
+
+function Invoke-DeleteUserDialog {
+    param([string]$UserName)
+    if ($script:Busy) { return }
+    $data = Show-DeleteUserDialog -UserName $UserName
+    if ($null -eq $data) { return }
+    $parameters = @{
+        UserName     = $UserName
+        ProtectedSid = $script:OriginalUserSid
+    }
+    if ($data.RestorePoint) { $parameters['CreateRestorePoint'] = $true }
+    Start-SetupTask -Label ((Get-UiText 'Users.DeleteTask') -f $UserName) `
+        -Command 'Remove-SetupLocalUser' -Parameters $parameters -OnComplete 'Complete-UserAction'
 }
 
 # --------------------------------------------------------------------------
@@ -2640,8 +3240,644 @@ function Complete-RenameCurrent {
 }
 
 # --------------------------------------------------------------------------
+# System tab (read-only)
+# --------------------------------------------------------------------------
+
+function Start-SystemRefresh {
+    param([bool]$CheckUpdates = $false)
+    if ($script:Busy) { return }
+    $label = if ($CheckUpdates) { Get-UiText 'System.CheckingUpdates' } else { Get-UiText 'System.Refreshing' }
+    $parameters = @{ SkipInternet = $false }
+    if ($CheckUpdates) { $parameters['CheckWindowsUpdate'] = $true }
+    Start-SetupTask -Label $label -Command 'Get-SetupSystemDashboard' -Parameters $parameters -OnComplete 'Complete-SystemRefresh'
+}
+
+function Render-SystemDashboard {
+    param($Dashboard)
+
+    $script:SystemSections.Children.Clear()
+    if ($null -eq $Dashboard -or $null -eq $Dashboard.PSObject.Properties['Sections']) {
+        $script:SystemSummary.Text = Get-UiText 'System.NoResult'
+        $script:SystemSummary.Foreground = Get-Brush '#C42B1C'
+        return
+    }
+
+    $toneColors = @{
+        Ok      = '#107C10'
+        Warning = '#9A6100'
+        Error   = '#C42B1C'
+        Info    = '#1B1F24'
+        Muted   = '#6B7680'
+    }
+
+    foreach ($section in @($Dashboard.Sections)) {
+        $card = [System.Windows.Controls.Border]::new()
+        $card.Style = $script:Window.Resources['Card']
+        $card.Width = 380
+        $card.Margin = [System.Windows.Thickness]::new(0, 0, 14, 14)
+        $card.Padding = [System.Windows.Thickness]::new(14)
+
+        $stack = [System.Windows.Controls.StackPanel]::new()
+        $title = New-UiText -Text (Get-UiText ([string]$section.TitleKey)) -Size 14 -Weight SemiBold
+        $title.Margin = [System.Windows.Thickness]::new(0, 0, 0, 8)
+        [void]$stack.Children.Add($title)
+
+        foreach ($row in @($section.Rows)) {
+            $grid = [System.Windows.Controls.Grid]::new()
+            $grid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 5)
+
+            $first = [System.Windows.Controls.ColumnDefinition]::new()
+            $first.Width = [System.Windows.GridLength]::new(136)
+            $second = [System.Windows.Controls.ColumnDefinition]::new()
+            $second.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
+            [void]$grid.ColumnDefinitions.Add($first)
+            [void]$grid.ColumnDefinitions.Add($second)
+
+            $labelText = [string]$row.Label
+            if ([string]::IsNullOrWhiteSpace($labelText)) { $labelText = Get-UiText ([string]$row.LabelKey) }
+            $label = New-UiText -Text $labelText -Size 11.5 -Color '#5F6B76' -Wrap $true
+            $label.VerticalAlignment = [System.Windows.VerticalAlignment]::Top
+            [System.Windows.Controls.Grid]::SetColumn($label, 0)
+            [void]$grid.Children.Add($label)
+
+            $valueText = [string]$row.Value
+            if (-not [string]::IsNullOrWhiteSpace([string]$row.ValueKey)) { $valueText = Get-UiText ([string]$row.ValueKey) }
+            $color = '#1B1F24'
+            if ($toneColors.ContainsKey([string]$row.Tone)) { $color = $toneColors[[string]$row.Tone] }
+            $value = New-UiText -Text $valueText -Size 12 -Weight SemiBold -Color $color -Wrap $true
+            $value.VerticalAlignment = [System.Windows.VerticalAlignment]::Top
+            [System.Windows.Controls.Grid]::SetColumn($value, 1)
+            [void]$grid.Children.Add($value)
+
+            if (-not [string]::IsNullOrWhiteSpace([string]$row.Detail)) {
+                $detailRow = [System.Windows.Controls.RowDefinition]::new()
+                $detailRow.Height = [System.Windows.GridLength]::Auto
+                [void]$grid.RowDefinitions.Add($detailRow)
+                $detail = New-UiText -Text ([string]$row.Detail) -Size 10.5 -Color '#7A8792' -Wrap $true
+                $detail.Margin = [System.Windows.Thickness]::new(0, 2, 0, 3)
+                [System.Windows.Controls.Grid]::SetRow($detail, 1)
+                [System.Windows.Controls.Grid]::SetColumn($detail, 0)
+                [System.Windows.Controls.Grid]::SetColumnSpan($detail, 2)
+                [void]$grid.Children.Add($detail)
+            }
+
+            [void]$stack.Children.Add($grid)
+        }
+
+        $card.Child = $stack
+        [void]$script:SystemSections.Children.Add($card)
+    }
+
+    $stamp = [string]$Dashboard.GeneratedAt
+    try { $stamp = ([datetime]$Dashboard.GeneratedAt).ToString('HH:mm:ss') } catch { }
+    $loaded = (Get-UiText 'System.Loaded') -f $stamp
+    $warnings = [int]$Dashboard.WarningCount
+    $errors = [int]$Dashboard.ErrorCount
+    if ($warnings -eq 0 -and $errors -eq 0) {
+        $script:SystemSummary.Text = (Get-UiText 'System.SummaryOk') -f $loaded
+        $script:SystemSummary.Foreground = Get-Brush '#107C10'
+    } else {
+        $script:SystemSummary.Text = (Get-UiText 'System.SummaryWarn') -f $warnings, $errors, $loaded
+        $script:SystemSummary.Foreground = if ($errors -gt 0) { Get-Brush '#C42B1C' } else { Get-Brush '#9A6100' }
+    }
+
+    $script:SystemLoaded = $true
+    $script:SystemLastDashboard = $Dashboard
+    Sync-SystemActionControls -Dashboard $Dashboard
+}
+
+function Complete-SystemRefresh {
+    $result = Get-FirstResult
+    if ($null -eq $result) {
+        $script:SystemSummary.Text = Get-UiText 'System.NoResult'
+        $script:SystemSummary.Foreground = Get-Brush '#C42B1C'
+        return
+    }
+
+    Render-SystemDashboard -Dashboard $result
+
+    if ($null -ne $result.PSObject.Properties['WindowsUpdate']) {
+        $update = $result.WindowsUpdate
+        if ($update.Searched -and -not $update.Success) {
+            Add-LogLine -Level Warning -Message ((Get-UiText 'System.CheckFailed') -f $update.Message)
+        }
+    }
+    Add-LogLine -Level Success -Message ((Get-UiText 'System.Loaded') -f (([datetime]$result.GeneratedAt).ToString('HH:mm:ss')))
+
+    if ($script:SystemExportAfterRefresh) {
+        $script:SystemExportAfterRefresh = $false
+        Export-SystemDashboardReport
+    }
+}
+
+function Export-SystemDashboardReport {
+    if ($script:Busy) { return }
+    if ($null -eq $script:SystemLastDashboard) {
+        Show-Message (Get-UiText 'System.ExportEmpty') (Get-UiText 'System.ExportTitle') 'Information'
+        $script:SystemExportAfterRefresh = $true
+        Start-SystemRefresh
+        return
+    }
+    Invoke-UiAction {
+        $result = Export-SetupSystemReport -Dashboard $script:SystemLastDashboard -Format Html
+        if ($result.Success) {
+            Add-LogLine -Level Success -Message $result.Message
+            Show-Message ((Get-UiText 'System.ExportDone') -f "`r`n", [string]$result.Data.Path) (Get-UiText 'System.ExportTitle') 'Information'
+        } else {
+            Show-Message $result.Message (Get-UiText 'System.ExportTitle') 'Error'
+        }
+    }
+}
+
+function Sync-SystemActionControls {
+    param($Dashboard)
+    if ($null -eq $Dashboard) { return }
+
+    if ($null -ne $Dashboard.PSObject.Properties['Power']) {
+        $power = $Dashboard.Power
+        $planKey = [string]$power.ActivePlanKey
+        $available = @($power.AvailablePlans)
+        if ($available.Count -eq 0) { $available = @('Balanced') }
+        $currentPlan = [string]$script:SystemPowerPlan.SelectedValue
+        $script:SystemPowerPlan.Items.Clear()
+        foreach ($key in @('Balanced', 'HighPerformance', 'PowerSaver')) {
+            if ($available -notcontains $key) { continue }
+            $textKey = switch ($key) {
+                'HighPerformance' { 'System.Plan.HighPerformance' }
+                'PowerSaver' { 'System.Plan.PowerSaver' }
+                default { 'System.Plan.Balanced' }
+            }
+            [void]$script:SystemPowerPlan.Items.Add([pscustomobject]@{ Text = (Get-UiText $textKey); Value = $key })
+        }
+        $target = $planKey
+        if ([string]::IsNullOrWhiteSpace($target) -and $available -contains $currentPlan) { $target = $currentPlan }
+        if ([string]::IsNullOrWhiteSpace($target)) { $target = [string]$available[0] }
+        $script:SystemPowerPlan.SelectedValue = $target
+        $script:SystemHibernate.IsChecked = ([string]$power.Hibernate -eq 'On')
+        $script:SystemFastStartup.IsChecked = ([string]$power.FastStartup -eq 'On')
+    }
+
+    if ($null -ne $Dashboard.PSObject.Properties['Network']) {
+        $names = @($Dashboard.Network.Adapters | ForEach-Object { [string]$_.Name } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $current = [string]$script:SystemAdapter.SelectedItem
+        $script:SystemAdapter.Items.Clear()
+        foreach ($name in $names) { [void]$script:SystemAdapter.Items.Add($name) }
+        if ($names -contains $current) { $script:SystemAdapter.SelectedItem = $current }
+        elseif ($script:SystemAdapter.Items.Count -gt 0) { $script:SystemAdapter.SelectedIndex = 0 }
+    }
+
+    if ($null -ne $Dashboard.PSObject.Properties['Storage']) {
+        $script:SystemStorageSense.IsChecked = ([string]$Dashboard.Storage.StorageSense -eq 'On')
+    }
+
+    $timeZone = ''
+    if ($null -ne $Dashboard.PSObject.Properties['Overview']) { $timeZone = [string]$Dashboard.Overview.TimeZone }
+    if (-not [string]::IsNullOrWhiteSpace($timeZone) -and $script:SystemTimeZone.Items.Contains($timeZone)) {
+        $script:SystemTimeZone.SelectedItem = $timeZone
+    }
+}
+
+function Invoke-SystemPowerApply {
+    if ($script:Busy) { return }
+    $item = $script:SystemPowerPlan.SelectedItem
+    if ($null -eq $item) {
+        Show-Message (Get-UiText 'System.Power.NoPlan') (Get-UiText 'System.Power.Title') 'Warning'
+        return
+    }
+    $plan = [string]$item.Value
+    $planText = [string]$item.Text
+    $hibernate = if ($script:SystemHibernate.IsChecked -eq $true) { 'On' } else { 'Off' }
+    $fastStartup = if ($script:SystemFastStartup.IsChecked -eq $true) { 'On' } else { 'Off' }
+    $hibernateText = if ($hibernate -eq 'On') { Get-UiText 'System.Value.On' } else { Get-UiText 'System.Value.Off' }
+    $fastStartupText = if ($fastStartup -eq 'On') { Get-UiText 'System.Value.On' } else { Get-UiText 'System.Value.Off' }
+    $text = (Get-UiText 'System.Power.Confirm') -f "`r`n", $planText, $hibernateText, $fastStartupText
+    if (-not (Show-Confirm $text (Get-UiText 'System.Power.Title'))) { return }
+    Start-SetupTask -Label (Get-UiText 'System.Power.Applying') -Command 'Set-SetupPowerSettings' `
+        -Parameters @{ Plan = $plan; Hibernate = $hibernate; FastStartup = $fastStartup } -OnComplete 'Complete-SystemAction'
+}
+
+function Invoke-SystemDnsApply {
+    if ($script:Busy) { return }
+    $adapter = [string]$script:SystemAdapter.SelectedItem
+    if ([string]::IsNullOrWhiteSpace($adapter)) {
+        Show-Message (Get-UiText 'System.Network.NoAdapter') (Get-UiText 'System.Network.Title') 'Warning'
+        return
+    }
+    $item = $script:SystemDnsPreset.SelectedItem
+    if ($null -eq $item) { return }
+    $preset = [string]$item.Value
+    $presetText = [string]$item.Text
+    $text = (Get-UiText 'System.Network.DnsConfirm') -f $adapter, $presetText, "`r`n"
+    if (-not (Show-Confirm $text (Get-UiText 'System.Network.Title'))) { return }
+    Start-SetupTask -Label (Get-UiText 'System.Action.Applying') -Command 'Set-SetupDnsPreset' `
+        -Parameters @{ AdapterName = $adapter; Preset = $preset } -OnComplete 'Complete-SystemAction'
+}
+
+function Invoke-SystemDnsFlush {
+    if ($script:Busy) { return }
+    Start-SetupTask -Label (Get-UiText 'System.Network.Flushing') -Command 'Clear-SetupDnsCache' `
+        -OnComplete 'Complete-SystemAction'
+}
+
+function Invoke-SystemNetworkTest {
+    if ($script:Busy) { return }
+    $target = ([string]$script:SystemNetworkTarget.Text).Trim()
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        Show-Message (Get-UiText 'System.Network.NoTarget') (Get-UiText 'System.Network.Title') 'Warning'
+        $script:SystemNetworkTarget.Focus() | Out-Null
+        return
+    }
+    Start-SetupTask -Label (Get-UiText 'System.Network.Testing') -Command 'Test-SetupNetworkPath' `
+        -Parameters @{ Target = $target; Count = 3 } -OnComplete 'Complete-SystemNetworkTest'
+}
+
+function Complete-SystemNetworkTest {
+    $result = Get-FirstResult
+    if ($null -eq $result) {
+        Show-Message (Get-UiText 'Common.NoResult') (Get-UiText 'System.Network.TestTitle') 'Warning'
+        return
+    }
+    [void]$script:SessionResults.Add($result)
+    $text = [string]$result.Message
+    if ($null -ne $result.Data -and $result.Data.ContainsKey('Path')) {
+        $path = @($result.Data.Path)
+        if ($path.Count -gt 0) { $text = $text + "`r`n`r`n" + ($path -join "`r`n") }
+    }
+    $icon = if ($result.Success) { 'Information' } else { 'Warning' }
+    Show-Message $text (Get-UiText 'System.Network.TestTitle') $icon
+}
+
+function Invoke-SystemStorageSenseApply {
+    if ($script:Busy) { return }
+    $state = if ($script:SystemStorageSense.IsChecked -eq $true) { 'On' } else { 'Off' }
+    $stateText = if ($state -eq 'On') { Get-UiText 'System.Value.On' } else { Get-UiText 'System.Value.Off' }
+    $text = (Get-UiText 'System.Storage.SenseConfirm') -f $stateText
+    if (-not (Show-Confirm $text (Get-UiText 'System.Storage.Title'))) { return }
+    Start-SetupTask -Label (Get-UiText 'System.Action.Applying') -Command 'Set-SetupStorageSense' `
+        -Parameters @{ State = $state } -OnComplete 'Complete-SystemAction'
+}
+
+function Invoke-SystemTempAnalyze {
+    if ($script:Busy) { return }
+    Start-SetupTask -Label (Get-UiText 'System.Storage.Analyzing') -Command 'Clear-SetupTempFiles' `
+        -Parameters @{ DryRun = $true; OlderThanDays = 1; IncludeWindowsTemp = $true } -OnComplete 'Complete-SystemTempPreview'
+}
+
+function Complete-SystemTempPreview {
+    $result = Get-FirstResult
+    if ($null -eq $result) {
+        Show-Message (Get-UiText 'Common.NoResult') (Get-UiText 'System.Storage.PreviewTitle') 'Warning'
+        return
+    }
+    [void]$script:SessionResults.Add($result)
+    $icon = if ($result.Success) { 'Information' } else { 'Warning' }
+    Show-Message $result.Message (Get-UiText 'System.Storage.PreviewTitle') $icon
+}
+
+function Invoke-SystemTempClean {
+    if ($script:Busy) { return }
+    $text = (Get-UiText 'System.Storage.CleanConfirm') -f 1, "`r`n"
+    if (-not (Show-Confirm $text (Get-UiText 'System.Storage.Title'))) { return }
+    Start-SetupTask -Label (Get-UiText 'System.Storage.Cleaning') -Command 'Clear-SetupTempFiles' `
+        -Parameters @{ OlderThanDays = 1; IncludeWindowsTemp = $true } -OnComplete 'Complete-SystemAction'
+}
+
+function Invoke-SystemTimeZoneApply {
+    if ($script:Busy) { return }
+    $id = [string]$script:SystemTimeZone.SelectedItem
+    if ([string]::IsNullOrWhiteSpace($id)) { return }
+    $text = (Get-UiText 'System.TimeZone.Confirm') -f $id
+    if (-not (Show-Confirm $text (Get-UiText 'System.TimeZone.Title'))) { return }
+    Start-SetupTask -Label (Get-UiText 'System.TimeZone.Applying') -Command 'Set-SetupTimeZone' `
+        -Parameters @{ Id = $id } -OnComplete 'Complete-SystemAction'
+}
+
+function Complete-SystemAction {
+    $result = Get-FirstResult
+    if ($null -eq $result) {
+        Show-Message (Get-UiText 'Common.NoResult') (Get-UiText 'System.ActionTitle') 'Warning'
+        return
+    }
+    [void]$script:SessionResults.Add($result)
+    if ($result.Success) {
+        Show-Message $result.Message (Get-UiText 'System.ActionTitle') 'Information'
+    } else {
+        Show-Message ($result.Message + "`r`n`r`n" + (Get-UiText 'Common.SeeLog')) (Get-UiText 'System.ActionTitle') 'Error'
+    }
+    Start-SystemRefresh
+}
+
+# --------------------------------------------------------------------------
 # Input dialogs
 # --------------------------------------------------------------------------
+
+function Show-InstallPreview {
+    param([object[]]$Rows)
+
+    $dialog = [System.Windows.Window]::new()
+    $dialog.Title = Get-UiText 'Software.PreviewTitle'
+    $dialog.Width = 560
+    $dialog.SizeToContent = [System.Windows.SizeToContent]::Height
+    $dialog.MaxHeight = 640
+    $dialog.WindowStartupLocation = [System.Windows.WindowStartupLocation]::CenterOwner
+    $dialog.ResizeMode = [System.Windows.ResizeMode]::NoResize
+    $dialog.Background = Get-Brush '#F4F6F8'
+    $dialog.Owner = $script:Window
+    $dialog.FontFamily = $script:Window.FontFamily
+    $dialog.FontSize = 13
+
+    $panel = [System.Windows.Controls.StackPanel]::new()
+    $panel.Margin = [System.Windows.Thickness]::new(20)
+
+    $intro = New-UiText -Text ((Get-UiText 'Software.PreviewIntro') -f $Rows.Count) -Size 12.5 -Color '#3A4650' -Wrap $true
+    $intro.Margin = [System.Windows.Thickness]::new(0, 0, 0, 10)
+    [void]$panel.Children.Add($intro)
+
+    $names = [System.Collections.Generic.List[string]]::new()
+    foreach ($row in $Rows) {
+        $line = ("- {0}" -f $row.Name)
+        $version = [string]$row.SelectedVersion
+        if ([string]::IsNullOrWhiteSpace($version) -and $null -ne $row.Item.PSObject.Properties['Version']) {
+            $version = [string]$row.Item.Version
+        }
+        if ($row.Kind -eq 'winget' -and -not [string]::IsNullOrWhiteSpace($version)) {
+            $line = $line + (" ({0})" -f $version)
+        }
+        [void]$names.Add($line)
+    }
+    $listBlock = New-UiText -Text ($names -join "`r`n") -Size 12 -Color '#1B1F24'
+    $scroll = [System.Windows.Controls.ScrollViewer]::new()
+    $scroll.MaxHeight = 200
+    $scroll.VerticalScrollBarVisibility = [System.Windows.Controls.ScrollBarVisibility]::Auto
+    $scroll.Margin = [System.Windows.Thickness]::new(0, 0, 0, 14)
+    $scroll.Content = $listBlock
+    [void]$panel.Children.Add($scroll)
+
+    $restore = [System.Windows.Controls.CheckBox]::new()
+    $restore.Content = Get-UiText 'Software.PreviewRestore'
+    $restore.Margin = [System.Windows.Thickness]::new(0, 0, 0, 4)
+    [void]$panel.Children.Add($restore)
+
+    $hint = New-UiText -Text (Get-UiText 'Software.PreviewRestoreHint') -Size 11.5 -Color '#5F6B76' -Wrap $true
+    $hint.Margin = [System.Windows.Thickness]::new(22, 0, 0, 16)
+    [void]$panel.Children.Add($hint)
+
+    $buttons = [System.Windows.Controls.StackPanel]::new()
+    $buttons.Orientation = [System.Windows.Controls.Orientation]::Horizontal
+    $buttons.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Right
+
+    $okButton = [System.Windows.Controls.Button]::new()
+    $okButton.Content = Get-UiText 'Software.PreviewProceed'
+    $okButton.Style = $script:Window.Resources['PrimaryButton']
+    $okButton.MinWidth = 100
+    $okButton.Margin = [System.Windows.Thickness]::new(0, 0, 8, 0)
+    $okButton.IsDefault = $true
+    [void]$buttons.Children.Add($okButton)
+
+    $cancelButton = [System.Windows.Controls.Button]::new()
+    $cancelButton.Content = Get-UiText 'Common.Cancel'
+    $cancelButton.Style = $script:Window.Resources['SecondaryButton']
+    $cancelButton.MinWidth = 92
+    $cancelButton.IsCancel = $true
+    [void]$buttons.Children.Add($cancelButton)
+
+    [void]$panel.Children.Add($buttons)
+    $dialog.Content = $panel
+
+    $script:PreviewDialog = $dialog
+    $script:PreviewDialogRestore = $restore
+    $script:PreviewDialogResult = $null
+    $script:PreviewDialogTitle = Get-UiText 'Software.PreviewTitle'
+
+    $okButton.Add_Click({
+        $script:PreviewDialogResult = [pscustomobject]@{ RestorePoint = ($script:PreviewDialogRestore.IsChecked -eq $true) }
+        $script:PreviewDialog.Close()
+    })
+    $cancelButton.Add_Click({
+        $script:PreviewDialogResult = $null
+        $script:PreviewDialog.Close()
+    })
+
+    [void]$dialog.ShowDialog()
+    $script:PreviewDialog = $null
+    $script:PreviewDialogRestore = $null
+    $result = $script:PreviewDialogResult
+    $script:PreviewDialogResult = $null
+    return $result
+}
+
+function Show-CreateUserDialog {
+    $dialog = [System.Windows.Window]::new()
+    $dialog.Title = Get-UiText 'Users.CreateTitle'
+    $dialog.Width = 500
+    $dialog.SizeToContent = [System.Windows.SizeToContent]::Height
+    $dialog.WindowStartupLocation = [System.Windows.WindowStartupLocation]::CenterOwner
+    $dialog.ResizeMode = [System.Windows.ResizeMode]::NoResize
+    $dialog.Background = Get-Brush '#F4F6F8'
+    $dialog.Owner = $script:Window
+    $dialog.FontFamily = $script:Window.FontFamily
+    $dialog.FontSize = 13
+
+    $panel = [System.Windows.Controls.StackPanel]::new()
+    $panel.Margin = [System.Windows.Thickness]::new(20)
+
+    $nameLabel = New-UiText -Text (Get-UiText 'Users.CreateNameLabel') -Size 12 -Color '#5F6B76'
+    $nameLabel.Margin = [System.Windows.Thickness]::new(0, 0, 0, 4)
+    [void]$panel.Children.Add($nameLabel)
+    $name = [System.Windows.Controls.TextBox]::new()
+    $name.Style = $script:Window.Resources['FieldBox']
+    $name.Margin = [System.Windows.Thickness]::new(0, 0, 0, 12)
+    [void]$panel.Children.Add($name)
+
+    $passwordLabel = New-UiText -Text (Get-UiText 'Users.CreatePasswordLabel') -Size 12 -Color '#5F6B76'
+    $passwordLabel.Margin = [System.Windows.Thickness]::new(0, 0, 0, 4)
+    [void]$panel.Children.Add($passwordLabel)
+    $password = [System.Windows.Controls.PasswordBox]::new()
+    $password.Padding = [System.Windows.Thickness]::new(8, 6, 8, 6)
+    $password.BorderBrush = Get-Brush '#D7DCE2'
+    $password.BorderThickness = [System.Windows.Thickness]::new(1)
+    [void]$panel.Children.Add($password)
+
+    $confirmLabel = New-UiText -Text (Get-UiText 'Users.CreateConfirmLabel') -Size 12 -Color '#5F6B76'
+    $confirmLabel.Margin = [System.Windows.Thickness]::new(0, 10, 0, 4)
+    [void]$panel.Children.Add($confirmLabel)
+    $confirm = [System.Windows.Controls.PasswordBox]::new()
+    $confirm.Padding = [System.Windows.Thickness]::new(8, 6, 8, 6)
+    $confirm.BorderBrush = Get-Brush '#D7DCE2'
+    $confirm.BorderThickness = [System.Windows.Thickness]::new(1)
+    [void]$panel.Children.Add($confirm)
+
+    $admin = [System.Windows.Controls.CheckBox]::new()
+    $admin.Content = Get-UiText 'Users.CreateAdmin'
+    $admin.Margin = [System.Windows.Thickness]::new(0, 12, 0, 2)
+    [void]$panel.Children.Add($admin)
+    $adminHint = New-UiText -Text (Get-UiText 'Users.CreateAdminHint') -Size 11.5 -Color '#5F6B76' -Wrap $true
+    $adminHint.Margin = [System.Windows.Thickness]::new(22, 0, 0, 8)
+    [void]$panel.Children.Add($adminHint)
+
+    $neverExpires = [System.Windows.Controls.CheckBox]::new()
+    $neverExpires.Content = Get-UiText 'Users.CreateNeverExpires'
+    $neverExpires.IsChecked = $true
+    [void]$panel.Children.Add($neverExpires)
+
+    $restore = [System.Windows.Controls.CheckBox]::new()
+    $restore.Content = Get-UiText 'Users.CreateRestore'
+    $restore.IsChecked = $true
+    $restore.Margin = [System.Windows.Thickness]::new(0, 6, 0, 0)
+    [void]$panel.Children.Add($restore)
+
+    $errorText = New-UiText -Text '' -Size 11.5 -Color '#C42B1C' -Wrap $true
+    $errorText.Margin = [System.Windows.Thickness]::new(0, 8, 0, 0)
+    [void]$panel.Children.Add($errorText)
+
+    $buttons = [System.Windows.Controls.StackPanel]::new()
+    $buttons.Orientation = [System.Windows.Controls.Orientation]::Horizontal
+    $buttons.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Right
+    $buttons.Margin = [System.Windows.Thickness]::new(0, 14, 0, 0)
+
+    $okButton = [System.Windows.Controls.Button]::new()
+    $okButton.Content = Get-UiText 'Users.CreateButton'
+    $okButton.Style = $script:Window.Resources['PrimaryButton']
+    $okButton.MinWidth = 100
+    $okButton.Margin = [System.Windows.Thickness]::new(0, 0, 8, 0)
+    $okButton.IsDefault = $true
+    [void]$buttons.Children.Add($okButton)
+
+    $cancelButton = [System.Windows.Controls.Button]::new()
+    $cancelButton.Content = Get-UiText 'Common.Cancel'
+    $cancelButton.Style = $script:Window.Resources['SecondaryButton']
+    $cancelButton.MinWidth = 92
+    $cancelButton.IsCancel = $true
+    [void]$buttons.Children.Add($cancelButton)
+
+    [void]$panel.Children.Add($buttons)
+    $dialog.Content = $panel
+
+    $script:CreateUserDialog = $dialog
+    $script:CreateUserName = $name
+    $script:CreateUserPassword = $password
+    $script:CreateUserConfirm = $confirm
+    $script:CreateUserAdmin = $admin
+    $script:CreateUserNeverExpires = $neverExpires
+    $script:CreateUserRestore = $restore
+    $script:CreateUserError = $errorText
+    $script:CreateUserResult = $null
+
+    $okButton.Add_Click({
+        $accountName = ([string]$script:CreateUserName.Text).Trim()
+        $validation = Test-LocalAccountName -Name $accountName
+        if ($null -ne $validation) {
+            $script:CreateUserError.Text = $validation
+            return
+        }
+        $one = $script:CreateUserPassword.SecurePassword
+        $two = $script:CreateUserConfirm.SecurePassword
+        if ($one.Length -lt 8) {
+            $script:CreateUserError.Text = Get-UiText 'Account.PasswordShort'
+            return
+        }
+        $plainOne = [System.Net.NetworkCredential]::new('', $one).Password
+        $plainTwo = [System.Net.NetworkCredential]::new('', $two).Password
+        $same = ($plainOne -ceq $plainTwo)
+        $plainOne = $null
+        $plainTwo = $null
+        if (-not $same) {
+            $script:CreateUserError.Text = Get-UiText 'Users.PasswordMismatch'
+            return
+        }
+        $script:CreateUserResult = [pscustomobject]@{
+            UserName             = $accountName
+            Password             = $one
+            Administrator        = ($script:CreateUserAdmin.IsChecked -eq $true)
+            PasswordNeverExpires = ($script:CreateUserNeverExpires.IsChecked -eq $true)
+            CreateRestorePoint   = ($script:CreateUserRestore.IsChecked -eq $true)
+        }
+        $script:CreateUserDialog.Close()
+    })
+    $cancelButton.Add_Click({
+        $script:CreateUserResult = $null
+        $script:CreateUserDialog.Close()
+    })
+    $dialog.Add_ContentRendered({ $script:CreateUserName.Focus() | Out-Null })
+
+    [void]$dialog.ShowDialog()
+    $script:CreateUserDialog = $null
+    $script:CreateUserName = $null
+    $script:CreateUserPassword = $null
+    $script:CreateUserConfirm = $null
+    $result = $script:CreateUserResult
+    $script:CreateUserResult = $null
+    return $result
+}
+
+function Show-DeleteUserDialog {
+    param([string]$UserName)
+
+    $dialog = [System.Windows.Window]::new()
+    $dialog.Title = Get-UiText 'Users.DeleteTitle'
+    $dialog.Width = 500
+    $dialog.SizeToContent = [System.Windows.SizeToContent]::Height
+    $dialog.WindowStartupLocation = [System.Windows.WindowStartupLocation]::CenterOwner
+    $dialog.ResizeMode = [System.Windows.ResizeMode]::NoResize
+    $dialog.Background = Get-Brush '#F4F6F8'
+    $dialog.Owner = $script:Window
+    $dialog.FontFamily = $script:Window.FontFamily
+    $dialog.FontSize = 13
+
+    $panel = [System.Windows.Controls.StackPanel]::new()
+    $panel.Margin = [System.Windows.Thickness]::new(20)
+
+    $message = New-UiText -Text ((Get-UiText 'Users.DeleteConfirm') -f $UserName, "`r`n") -Size 12.5 -Color '#3A4650' -Wrap $true
+    $message.Margin = [System.Windows.Thickness]::new(0, 0, 0, 12)
+    [void]$panel.Children.Add($message)
+
+    $restore = [System.Windows.Controls.CheckBox]::new()
+    $restore.Content = Get-UiText 'Users.DeleteRestore'
+    $restore.IsChecked = $true
+    [void]$panel.Children.Add($restore)
+
+    $buttons = [System.Windows.Controls.StackPanel]::new()
+    $buttons.Orientation = [System.Windows.Controls.Orientation]::Horizontal
+    $buttons.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Right
+    $buttons.Margin = [System.Windows.Thickness]::new(0, 16, 0, 0)
+
+    $okButton = [System.Windows.Controls.Button]::new()
+    $okButton.Content = Get-UiText 'Users.Delete'
+    $okButton.Style = $script:Window.Resources['PrimaryButton']
+    $okButton.MinWidth = 100
+    $okButton.Margin = [System.Windows.Thickness]::new(0, 0, 8, 0)
+    [void]$buttons.Children.Add($okButton)
+
+    $cancelButton = [System.Windows.Controls.Button]::new()
+    $cancelButton.Content = Get-UiText 'Common.Cancel'
+    $cancelButton.Style = $script:Window.Resources['SecondaryButton']
+    $cancelButton.MinWidth = 92
+    $cancelButton.IsCancel = $true
+    [void]$buttons.Children.Add($cancelButton)
+
+    [void]$panel.Children.Add($buttons)
+    $dialog.Content = $panel
+
+    $script:DeleteUserDialog = $dialog
+    $script:DeleteUserRestore = $restore
+    $script:DeleteUserResult = $null
+
+    $okButton.Add_Click({
+        $script:DeleteUserResult = [pscustomobject]@{ RestorePoint = ($script:DeleteUserRestore.IsChecked -eq $true) }
+        $script:DeleteUserDialog.Close()
+    })
+    $cancelButton.Add_Click({
+        $script:DeleteUserResult = $null
+        $script:DeleteUserDialog.Close()
+    })
+
+    [void]$dialog.ShowDialog()
+    $script:DeleteUserDialog = $null
+    $result = $script:DeleteUserResult
+    $script:DeleteUserResult = $null
+    return $result
+}
 
 function Show-InputBox {
     param([string]$Title, [string]$Label)
@@ -2831,20 +4067,39 @@ $script:ActionButtons = @(
     $script:SoftwareInstallButton,
     $script:SoftwareUpdateButton,
     $script:SoftwareUninstallButton,
+    $script:SoftwarePreflightButton,
+    $script:SoftwareReportButton,
+    $script:SystemRefreshButton,
+    $script:SystemUpdateButton,
+    $script:SystemExportButton,
+    $script:SystemPowerApply,
+    $script:SystemDnsApply,
+    $script:SystemDnsFlush,
+    $script:SystemNetworkTest,
+    $script:SystemStorageSenseApply,
+    $script:SystemTempAnalyze,
+    $script:SystemTempClean,
+    $script:SystemTimeZoneApply,
     $script:PrinterInstallButton,
     $script:PrinterRefreshButton,
     $script:UserRefreshButton,
+    $script:UserCreateButton,
     $script:AdminEnableButton,
     $script:RenameApplyButton
 )
 
 $script:NavSoftware.Add_Checked({ Show-Page 'Software' })
+$script:NavSystem.Add_Checked({ Show-Page 'System' })
 $script:NavPrinters.Add_Checked({ Show-Page 'Printers' })
 $script:NavUsers.Add_Checked({ Show-Page 'Users' })
 $script:NavAccount.Add_Checked({ Show-Page 'Account' })
 $script:NavLog.Add_Checked({ Show-Page 'Log' })
 
 $script:SoftwareFilter.Add_TextChanged({ Apply-SoftwareFilter; Update-SoftwareActions })
+$script:SoftwareCategory.Add_SelectionChanged({ Apply-SoftwareFilter; Update-SoftwareActions })
+$script:SoftwareProfile.Add_SelectionChanged({ Apply-SoftwareProfile })
+$script:SoftwarePreflightButton.Add_Click({ Show-PreflightReport })
+$script:SoftwareReportButton.Add_Click({ Export-SoftwareReport })
 $script:SoftwareSelectAll.Add_Click({
     foreach ($row in $script:SoftwareRows) {
         if ($row.Container.Visibility -eq [System.Windows.Visibility]::Visible) { $row.CheckBox.IsChecked = $true }
@@ -2858,10 +4113,25 @@ $script:SoftwareUpdateButton.Add_Click({ Start-SoftwareUpdate })
 $script:SoftwareUninstallButton.Add_Click({ Start-SoftwareUninstall })
 $script:SoftwareCheckButton.Add_Click({ Start-SoftwareCheck })
 
+$script:SystemRefreshButton.Add_Click({ Start-SystemRefresh })
+$script:SystemUpdateButton.Add_Click({ Start-SystemRefresh -CheckUpdates $true })
+$script:SystemExportButton.Add_Click({ Export-SystemDashboardReport })
+$script:SystemPowerApply.Add_Click({ Invoke-SystemPowerApply })
+$script:SystemDnsApply.Add_Click({ Invoke-SystemDnsApply })
+$script:SystemDnsFlush.Add_Click({ Invoke-SystemDnsFlush })
+$script:SystemNetworkTest.Add_Click({ Invoke-SystemNetworkTest })
+$script:SystemStorageSenseApply.Add_Click({ Invoke-SystemStorageSenseApply })
+$script:SystemTempAnalyze.Add_Click({ Invoke-SystemTempAnalyze })
+$script:SystemTempClean.Add_Click({ Invoke-SystemTempClean })
+$script:SystemTimeZoneApply.Add_Click({ Invoke-SystemTimeZoneApply })
+$script:SystemHibernate.Add_Unchecked({ $script:SystemFastStartup.IsChecked = $false })
+$script:SystemFastStartup.Add_Checked({ $script:SystemHibernate.IsChecked = $true })
+
 $script:PrinterMake.Add_SelectionChanged({ Update-PrinterDriverInfo })
 $script:PrinterInstallButton.Add_Click({ Invoke-PrinterInstall })
 $script:PrinterRefreshButton.Add_Click({ Refresh-Printers })
 $script:UserRefreshButton.Add_Click({ Refresh-Users })
+$script:UserCreateButton.Add_Click({ Invoke-CreateUserDialog })
 $script:AdminEnableButton.Add_Click({ Invoke-AdminEnable })
 $script:RenameApplyButton.Add_Click({ Invoke-RenameCurrentUser })
 
@@ -2968,6 +4238,7 @@ foreach ($preset in $presets) { [void]$script:PrinterMake.Items.Add($preset) }
 if ($presets.Count -gt 0) { $script:PrinterMake.SelectedIndex = 0 }
 
 Refresh-SoftwareList
+Initialize-SoftwareFilters
 Refresh-Printers
 Refresh-Users
 Refresh-Account
@@ -2983,11 +4254,33 @@ Add-LogLine -Level Detail -Message ("Logos: {0} image(s) in {1}" -f $logoCount, 
 Add-LogLine -Level Detail -Message ("PowerShell {0} | {1} | Admin: {2}" -f $PSVersionTable.PSVersion, [Environment]::OSVersion.VersionString, $isAdmin)
 Add-LogLine -Level Detail -Message ("Log file: {0}" -f $script:LogFile)
 
+# Static action choices. The power plans are populated from the dashboard so
+# only plans Windows actually offers are shown.
+$script:SystemDnsPreset.Items.Clear()
+foreach ($preset in @(
+        @{ Key = 'Automatic'; TextKey = 'System.Dns.Automatic' }
+        @{ Key = 'Cloudflare'; TextKey = 'System.Dns.Cloudflare' }
+        @{ Key = 'Google'; TextKey = 'System.Dns.Google' }
+        @{ Key = 'Quad9'; TextKey = 'System.Dns.Quad9' }
+    )) {
+    [void]$script:SystemDnsPreset.Items.Add([pscustomobject]@{ Text = (Get-UiText $preset.TextKey); Value = $preset.Key })
+}
+if ($script:SystemDnsPreset.Items.Count -gt 0) { $script:SystemDnsPreset.SelectedIndex = 0 }
+
+$script:SystemTimeZone.Items.Clear()
+try {
+    foreach ($zone in [TimeZoneInfo]::GetSystemTimeZones()) { [void]$script:SystemTimeZone.Items.Add($zone.Id) }
+    if ($script:SystemTimeZone.Items.Contains([TimeZoneInfo]::Local.Id)) {
+        $script:SystemTimeZone.SelectedItem = [TimeZoneInfo]::Local.Id
+    }
+} catch { }
+
 $script:NavSoftware.IsChecked = $true
 Show-Page 'Software'
 if ($StartPage -ne 'Software') {
     $navMap = @{
         Software = $script:NavSoftware
+        System   = $script:NavSystem
         Printers = $script:NavPrinters
         Users    = $script:NavUsers
         Account  = $script:NavAccount
@@ -2999,7 +4292,10 @@ if ($StartPage -ne 'Software') {
 
 if ($NoShow) {
     # Smoke test path: the whole window was built and every card populated.
-    Write-Output ('GUI OK: {0} software item(s), {1} printer(s), {2} user(s).' -f $script:SoftwareRows.Count, $script:PrinterRows.Count, $script:UserRows.Count)
+    $smokeDashboard = Get-SetupSystemDashboard -SkipInternet
+    Render-SystemDashboard -Dashboard $smokeDashboard
+    Write-Output ('GUI OK: {0} software item(s), {1} categories, {2} profiles, {3} printer(s), {4} user(s), {5} system section(s).' -f `
+        $script:SoftwareRows.Count, ($script:SoftwareCategory.Items.Count - 1), ($script:SoftwareProfile.Items.Count - 1), $script:PrinterRows.Count, $script:UserRows.Count, @($smokeDashboard.Sections).Count)
     $script:Window.Close()
     exit 0
 }

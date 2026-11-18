@@ -27,20 +27,21 @@ $env:SETUP_GUI=0; irm https://tinyurl.com/27wv3wmc | iex
 
 ## 🪟 Window mode (GUI)
 
-Both front-ends install software, set up printers and manage local accounts. The window additionally checks installed versions, offers Winget updates and uninstalls applications. Pick whichever you prefer; the window is the default.
+Both front-ends install software, set up printers, manage local accounts and show a read-only system status. The window additionally checks installed versions, offers Winget updates and uninstalls applications. Pick whichever you prefer; the window is the default.
 
 - **Window (default):** `Run-Setup.bat`, `Run-Setup-Gui.bat`, `.\Install-MyPC.Gui.ps1`, or the one-liner above.
 - **Console:** `Run-Setup.bat console`, `.\Install-MyPC.ps1`, or the `SETUP_GUI=0` one-liner.
 
 From the window, the **Open console** button in the header switches to the text menu: it opens `Install-MyPC.ps1` in a new PowerShell window (already elevated) and closes the window. It is disabled while an install is running.
 
-The window has five tabs:
+The window has six tabs:
 
 | Tab | What you can do |
 |-----|-----------------|
-| **Software** | Filter the list, tick applications, then **Install selected**. **Check versions and updates** fills the *Installed version* and *Available update* columns from Windows and Winget, and refreshes the *Install version* dropdown on every unpinned Winget-source entry; each dropdown also has a small recycle icon that reloads just that application's versions. The update column shows `Up to date`, `Pinned`, `Manual`, `Unknown` or the newer version. Select installed apps to **Update selected** (Winget only) or **Uninstall selected** (after a confirmation). Each row shows the application logo, the `WINGET`/`LOCAL` badge and a status such as `Ready`, `Not installed`, `Installed`, `Update available`, `Installing...`, `Installed (restart)`, `Skipped`, `Updated`, `Uninstalled` or `Failed`. |
-| **Printers** | Pick a manufacturer, type the IP/hostname, port and optional name, then **Install printer**. The right-hand list shows installed printers and lets you rename one. |
-| **Users** | Rename a local account, change its password, add/remove group membership, or enable/disable it. The only enabled administrator is marked `LAST ADMIN - LOCKED` and cannot be changed or disabled; the account you are signed in with cannot be disabled either. |
+| **Software** | Filter the list, narrow it by **Category**, or pick a **Profile** (Office, Developer, Technician, Minimal) to tick a preset selection. **Install selected** opens a confirmation preview listing every item and an optional **Create a System Restore point** checkbox, then runs preflight checks; a blocking problem stops the install. **Check versions and updates** fills the *Installed version* and *Available update* columns from Windows and Winget, and refreshes the *Install version* dropdown on every unpinned Winget-source entry; each dropdown also has a small recycle icon that reloads just that application's versions. The update column shows `Up to date`, `Pinned`, `Manual`, `Unknown` or the newer version. Select installed apps to **Update selected** (Winget only) or **Uninstall selected** (after a confirmation). **Preflight checks** shows elevation, PowerShell, Windows build, disk space, Internet, winget, pending restart and System Restore status. **Export report** writes an HTML report with the system information and every action attempted in this session. Each row shows the application logo, the `WINGET`/`LOCAL` badge and a status such as `Ready`, `Not installed`, `Installed`, `Update available`, `Installing...`, `Installed (restart)`, `Skipped`, `Updated`, `Uninstalled` or `Failed`. |
+| **System** | Read-only dashboard: computer and Windows version, uptime, memory, Windows Update service, security (Defender, firewall, Secure Boot, TPM, BitLocker, UAC, activation), storage, network, power and optional-feature status. **Refresh** reloads the status, **Check for updates** runs an opt-in online Windows Update search (it can take several minutes), and **Export report** writes the dashboard to `Logs\system-report-*.html`. The dashboard itself never changes the PC. Below it, **maintenance actions** change the power plan, hibernation, fast startup, DNS servers, Storage Sense, temporary files and time zone. Each action asks for confirmation and is logged; DNS can be restored with the Automatic (DHCP) preset. |
+| **Printers** | Pick a manufacturer, type the IP/hostname, port and optional name, then **Install printer**. The right-hand list shows installed printers and lets you rename one, **Set default** or send a **Test page**. |
+| **Users** | Rename a local account, change its password, add/remove group membership, enable/disable it, **Create user** (standard or administrator, with an optional restore point) or **Delete** it (the profile folder is kept, and an optional restore point is offered). The only enabled administrator is marked `LAST ADMIN - LOCKED` and cannot be changed, disabled or deleted; the account you are signed in with cannot be disabled or deleted either. |
 | **Account** | Enable the built-in Administrator (password typed twice, never stored), or rename the account you are signed in with. |
 | **Log** | Live progress from the current install, with **Copy**, **Open folder** and **Clear**. |
 
@@ -51,6 +52,8 @@ Notes:
 - **Same elevation.** The window relaunches itself with UAC on start, and still passes the original user's SID, so "rename signed-in user" targets the right account.
 - **The window never freezes.** Installs, updates and uninstalls run in a background runspace; a **Cancel** button appears in the status bar while something is running.
 - **Logs:** `Logs\gui-YYYYMMDD-HHMMSS.log`, one per window session.
+- **Safety first.** Every install runs read-only preflight checks before touching the PC. A blocking problem (not elevated, too little disk space, unsupported PowerShell) stops the run; warnings (no Internet, pending restart, no restore point) are shown but do not block. **Install selected** offers an optional System Restore checkpoint, and user creation/deletion offers one by default. Restore points are reported as skipped instead of failing when System Protection is disabled.
+- **Reports:** **Export report** writes an HTML file to `Logs\` with the machine information and every action attempted in the window session. The **System** tab can export its own dashboard to `Logs\system-report-*.html` (HTML, JSON or CSV when called from the module).
 - **Logos:** each software row shows the image named by its `Logo` field in `Software.json` (for example `logo/chrome.png`). The files live in the `logo` folder. If an image is missing or unreadable, the row shows a colored tile with the application's first letter instead, so a bad logo never blocks an install.
 - **Installed checker (window only).** **Check versions and updates** reads the 32-bit, 64-bit and per-user Add/Remove Programs entries and, for `WINGET` rows, the package list reported by Winget. The *Installed version* column shows the registry version when one exists. An update is offered only when Winget recognises the catalog ID in its `winget` source, so the window never proposes an update it cannot perform. Applications Winget does not manage, such as Chrome installed from its MSI, are compared with the version published by the Winget source and show `Up to date` when they match; when the source has a newer version, the window updates the app by reinstalling that version. Unrecognised Winget IDs show `Unknown`, pinned entries show `Pinned`, and local installers show `Manual`. The same check refreshes the *Install version* dropdown on every unpinned Winget-source entry: choose `Latest` or an exact release before **Install selected**. Because it queries each application separately, the full check takes longer as the catalog grows; the recycle icon next to a dropdown reloads only that application. **Uninstall selected** uses `winget uninstall` when Winget manages the package and falls back to the registered uninstaller otherwise. A check runs automatically after every install, update or uninstall.
 - The GUI does **not** write `Software.json` — it is read-only. Edit the file by hand to change the catalog.
@@ -66,10 +69,15 @@ When you run the console version you get a main menu; the window version exposes
 |---|--------|-------------|
 | 1 | **Enable built-in Administrator** | Enables the hidden Administrator account (SID ending in `-500`, so `Administrator` or `Administrateur`) and prompts you to enter a new password. Type `YES`/`OUI` (any case) to confirm. |
 | 2 | **Rename current local user** | Renames the local account you were signed in with (name + display name). Does **not** rename `C:\Users\OldName`. |
-| 3 | **Install software** | Shows a numbered list from `Software.json`. Install only what you pick, e.g. `1,3,5`, or `A` for all, `0` to skip. |
-| 4 | **Printers** | Submenu: install a printer (pick manufacturer, then IP/hostname, port, name), list installed printers (driver, port, status, default), or rename any printer. |
-| 5 | **Users** | Submenu: list local users (with member-of groups), rename any user, change any user's password, change group membership (add/remove, e.g. Administrators), or enable/disable an account (files and password are kept). The only enabled administrator is fully locked: its group membership cannot be changed and it cannot be disabled; the account you are signed in with cannot be disabled either. |
+| 3 | **Install software** | Shows a numbered list from `Software.json` grouped by category. Install only what you pick, e.g. `1,3,5`, `A` for all, `P` for a profile, `0` to skip. A preview lists the selection, then preflight checks run and an optional restore point is offered before installing. |
+| 4 | **Printers** | Submenu: install a printer (pick manufacturer, then IP/hostname, port, name), list installed printers (driver, port, status, default), rename any printer, set the default printer, or send a test page. |
+| 5 | **Users** | Submenu: list local users (with member-of groups), rename any user, change any user's password, change group membership (add/remove, e.g. Administrators), enable/disable an account, create a local user (standard or administrator), or delete one (profile folder kept). The only enabled administrator is fully locked: its group membership cannot be changed and it cannot be disabled or deleted; the account you are signed in with cannot be disabled or deleted either. |
 | 6 | **Run all** | Runs 1 + 2 + 3 + 4 + 5 in order. |
+| 7 | **Preflight checks** | Shows elevation, PowerShell version, Windows build, free disk space, Internet, winget, pending restart and System Restore status. |
+| 8 | **Create a restore point** | Creates a Windows System Restore checkpoint on request and reports when System Protection is unavailable. |
+| 9 | **Export an HTML report** | Writes the system information and every action attempted in this session to `Logs\setup-report-*.html`. |
+| 10 | **System status report (read-only)** | Prints the computer, Windows Update, security, storage, network, power and optional-feature status. Asks before running an online Windows Update search, then offers to export the dashboard to `Logs\system-report-*.html`. Nothing is changed. |
+| 11 | **System maintenance** | Submenu: power plan, hibernation, fast startup, DNS presets (Cloudflare, Google, Quad9 or automatic), DNS flush, ping with optional traceroute, temp-file preview and cleanup, and time zone. Every change asks for confirmation and is logged. |
 | 0 | **Exit** | Exit without further changes. |
 
 After each step finishes you return to this menu: press **Enter** for home, or `0` to exit.
@@ -78,28 +86,74 @@ You can also combine options, e.g. `1,3`.
 
 ### 📦 Default software list
 
-All installed via [Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/), except the local installers:
+The catalog ships 34 enabled entries plus two disabled remote-access tools (AnyDesk, Tailscale). Every application is installed through [Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) (Windows Scan and WhatsApp come from the Microsoft Store source), except the local installers marked below. Entries are grouped by category in the window and the console list.
+
+**Browsers**
 
 1. Google Chrome
 2. Mozilla Firefox
-3. 7-Zip
-4. VLC media player
-5. Adobe Acrobat Reader
-6. Notepad++
-7. Visual Studio Code
-8. Git
-9. Microsoft PowerToys
-10. Zoom Workplace
-11. WhatsApp
-12. LibreOffice
-13. WinRAR
-14. NAPS2
-15. PuTTY
-16. Windows Scan (Microsoft Store)
-17. Microsoft Office Home Business 2024 (Français) — auto-downloaded from Microsoft (~7 MB Click-to-Run setup)
-18. OrbitConvert — auto-downloaded from GitHub releases (~92 MB per-user MSI)
+3. Brave
 
-> The numbers are generated from entries with `"Enabled": true` in `Software.json`. Disable/add an entry and the numbers shift automatically.
+**Communication**
+
+4. Slack
+5. Zoom Workplace
+6. WhatsApp
+
+**Development**
+
+7. Notepad++
+8. Visual Studio Code
+9. Git
+10. Microsoft PowerToys
+
+**Diagnostics**
+
+11. CrystalDiskInfo
+12. HWiNFO
+
+**Media**
+
+13. ShareX
+14. VLC media player
+
+**Office and PDF**
+
+15. SumatraPDF
+16. Adobe Acrobat Reader
+17. LibreOffice
+18. Microsoft Office Home Business 2024 (Français) — auto-downloaded from Microsoft (~7 MB Click-to-Run setup)
+
+**Runtimes**
+
+19. Microsoft Visual C++ 2015-2022 Redistributable (x64)
+20. Microsoft Visual C++ 2015-2022 Redistributable (x86)
+21. Microsoft .NET Desktop Runtime 8
+22. Microsoft Edge WebView2 Runtime
+23. Microsoft DirectX End-User Runtime
+24. Eclipse Temurin JRE 21
+
+**Security**
+
+25. KeePassXC
+26. Bitwarden
+
+**Utilities**
+
+27. 7-Zip
+28. Everything
+29. PuTTY
+30. Rufus
+31. WinRAR
+32. NAPS2
+33. Windows Scan
+34. OrbitConvert — auto-downloaded from GitHub releases (~92 MB per-user MSI)
+
+Disabled by default: **AnyDesk** and **Tailscale** (remote access). Enable them in `Software.json` when a machine needs remote support.
+
+Profiles in `Software.json` preselect a group of these entries: **Office** (12 apps), **Developer** (10), **Technician** (9 available, 11 when AnyDesk and Tailscale are enabled) and **Minimal** (8).
+
+> The numbers are generated from entries with `"Enabled": true` in `Software.json`. Disable/add an entry and the numbers shift automatically. Profiles are matched by `Id` or `Name`.
 
 ---
 
@@ -156,18 +210,24 @@ Example session:
 Choose what you want to do:
   1. Enable built-in Administrator and set a new password (you will enter it)
   2. Rename the currently signed-in local user account
-  3. Choose software to install from a numbered list
-  4. Printers (install / list / rename)
-  5. Users (list / rename / password / groups)
+  3. Choose software to install from a numbered list or a profile
+  4. Printers (install / list / rename / default / test page)
+  5. Users (list / rename / password / groups / enable-disable / create / delete)
   6. Run all options (1+2+3+4+5)
+  7. Preflight checks and system information
+  8. Create a System Restore point
+  9. Export an HTML report
+ 10. System status report (read-only)
+ 11. System maintenance (power, DNS, temp files, time zone)
   0. Exit
 
 Enter option number(s): 1,3
 
 SOFTWARE LIST — enter numbers separated by commas (example: 1,3,5).
-Enter A to select all enabled items, or 0 to skip software installation.
-  1. [Winget] Google Chrome — Winget ID: Google.Chrome
-  2. [Winget] Mozilla Firefox — Winget ID: Mozilla.Firefox
+Enter A to select all enabled items, P for a profile, or 0 to skip software installation.
+Profiles: Office, Developer, Technician, Minimal
+  1. [Winget][Browsers] Google Chrome — Winget ID: Google.Chrome
+  2. [Winget][Browsers] Mozilla Firefox — Winget ID: Mozilla.Firefox
   ...
 Software numbers: 1,3,5
 ```
@@ -185,6 +245,7 @@ windows-install-script/
 ├── Setup.Core.psm1    ← shared logic used by both front-ends
 ├── Setup-Online.ps1   ← web launcher for `irm ... | iex`
 ├── Software.json      ← edit this to add/remove apps
+├── verify-setup.ps1   ← read-only acceptance checks (catalog, logos, EN/FR, GUI)
 ├── logo/              ← one PNG per application (shown in the window)
 │   └── README.md      ← sources, format and trademark note
 ├── Installers/        ← optional folder for your own .exe / .msi files
@@ -200,6 +261,7 @@ windows-install-script/
 - **`Install-MyPC.Gui.ps1`** — window front-end (WPF, embedded XAML).
 - **`Setup.Core.psm1`** — every action (Winget, local installers, printers, users, Administrator). Both front-ends call it, so a fix applies to both. It never prompts and never writes to the console.
 - **`Software.json`** — the only file you normally need to edit.
+- **`verify-setup.ps1`** — read-only acceptance checks: parsing, ASCII sources, catalog IDs, 128×128 logos, EN/FR string coverage, core safety actions, report export and both GUI smoke tests. Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify-setup.ps1` (add `-SkipGui` on a machine without an interactive desktop).
 - **`logo/`** — application icons for the window (PNG). See `logo/README.md` for sources and reuse notes.
 
 ---
@@ -490,6 +552,22 @@ Safety: if only one enabled administrator is left on the PC, its group membershi
 | **Open console** reports a missing file | Keep `Install-MyPC.ps1` next to `Install-MyPC.Gui.ps1`. Re-extract the kit, or use `Run-Setup.bat console` from the full folder. |
 
 Logs are in `Logs\setup-YYYYMMDD-HHMMSS.log` for the console and `Logs\gui-YYYYMMDD-HHMMSS.log` for the window.
+
+---
+
+## 🗺️ Future updates
+
+These controls are deliberately **not** in the current version. They change security, connectivity or boot behaviour, so they are planned for later releases with their own confirmations and rollback path:
+
+- **Windows features**: .NET 3.5, WSL, Hyper-V, Windows Sandbox, long paths, Developer Mode, RDP and SMB1.
+- **Privacy and debloat**: telemetry/advertising toggles and removal of built-in apps.
+- **Services panel**: start mode changes for Windows services.
+- **Windows Update control**: pause updates, driver-update toggle and forced installs.
+- **Network addressing**: static IP and proxy configuration (only DNS presets are available today).
+- **Regional settings**: region and keyboard layouts.
+- **Disk Cleanup**: scheduled cleanup tasks.
+
+Nothing in the current System tab or maintenance menu depends on these items.
 
 ---
 

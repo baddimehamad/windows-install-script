@@ -4,6 +4,7 @@
       "Name": "Google Chrome",
       "Type": "winget",
       "Id": "Google.Chrome",
+      "Category": "browsers",
       "VersionPicker": true,
       "Logo": "logo/chrome.png",
       "FallbackUrl": "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi",
@@ -13,6 +14,7 @@
       "Name": "Mozilla Firefox",
       "Type": "winget",
       "Id": "Mozilla.Firefox",
+      "Category": "browsers",
       "VersionPicker": true,
       "Logo": "logo/firefox.png",
       "Enabled": true
@@ -21,22 +23,61 @@
       "Name": "Mozilla Firefox 151.0 (pinned example)",
       "Type": "winget",
       "Id": "Mozilla.Firefox",
+      "Category": "browsers",
       "Version": "151.0",
       "Logo": "logo/firefox.png",
       "Enabled": false
     },
     {
+      "Name": "Brave",
+      "Type": "winget",
+      "Id": "Brave.Brave",
+      "Category": "browsers",
+      "VersionPicker": true,
+      "Logo": "logo/brave.png",
+      "Enabled": true
+    },
+    {
       "Name": "7-Zip",
       "Type": "winget",
       "Id": "7zip.7zip",
+      "Category": "utilities",
       "VersionPicker": true,
       "Logo": "logo/7zip.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Everything",
+      "Type": "winget",
+      "Id": "voidtools.Everything",
+      "Category": "utilities",
+      "VersionPicker": true,
+      "Logo": "logo/everything.png",
+      "Enabled": true
+    },
+    {
+      "Name": "SumatraPDF",
+      "Type": "winget",
+      "Id": "SumatraPDF.SumatraPDF",
+      "Category": "office",
+      "VersionPicker": true,
+      "Logo": "logo/sumatrapdf.png",
+      "Enabled": true
+    },
+    {
+      "Name": "ShareX",
+      "Type": "winget",
+      "Id": "ShareX.ShareX",
+      "Category": "media",
+      "VersionPicker": true,
+      "Logo": "logo/sharex.png",
       "Enabled": true
     },
     {
       "Name": "VLC media player",
       "Type": "winget",
       "Id": "VideoLAN.VLC",
+      "Category": "media",
       "VersionPicker": true,
       "Logo": "logo/vlc.png",
       "Enabled": true
@@ -45,6 +86,7 @@
       "Name": "Adobe Acrobat Reader",
       "Type": "winget",
       "Id": "Adobe.Acrobat.Reader.64-bit",
+      "Category": "office",
       "VersionPicker": true,
       "Logo": "logo/acrobat-reader.png",
       "Enabled": true
@@ -53,6 +95,7 @@
       "Name": "Notepad++",
       "Type": "winget",
       "Id": "Notepad++.Notepad++",
+      "Category": "development",
       "VersionPicker": true,
       "Logo": "logo/notepad-plus-plus.png",
       "Enabled": true
@@ -61,6 +104,7 @@
       "Name": "Visual Studio Code",
       "Type": "winget",
       "Id": "Microsoft.VisualStudioCode",
+      "Category": "development",
       "VersionPicker": true,
       "Logo": "logo/visual-studio-code.png",
       "Enabled": true
@@ -69,6 +113,7 @@
       "Name": "Git",
       "Type": "winget",
       "Id": "Git.Git",
+      "Category": "development",
       "VersionPicker": true,
       "Logo": "logo/git.png",
       "Enabled": true
@@ -77,14 +122,97 @@
       "Name": "Microsoft PowerToys",
       "Type": "winget",
       "Id": "Microsoft.PowerToys",
+      "Category": "development",
       "VersionPicker": true,
       "Logo": "logo/powertoys.png",
+      "Enabled": true
+    },
+    {
+      "Name": "PuTTY",
+      "Type": "winget",
+      "Id": "PuTTY.PuTTY",
+      "Category": "utilities",
+      "VersionPicker": true,
+      "Logo": "logo/putty.png",
+      "Enabled": true
+    },
+    {
+      "Name": "KeePassXC",
+      "Type": "winget",
+      "Id": "KeePassXCTeam.KeePassXC",
+      "Category": "security",
+      "VersionPicker": true,
+      "Logo": "logo/keepassxc.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Bitwarden",
+      "Type": "winget",
+      "Id": "Bitwarden.Bitwarden",
+      "Category": "security",
+      "VersionPicker": true,
+      "Logo": "logo/bitwarden.png",
+      "Enabled": true
+    },
+    {
+      "Name": "CrystalDiskInfo",
+      "Type": "winget",
+      "Id": "CrystalDewWorld.CrystalDiskInfo",
+      "Category": "diagnostics",
+      "VersionPicker": true,
+      "Logo": "logo/crystaldiskinfo.png",
+      "Enabled": true
+    },
+    {
+      "Name": "HWiNFO",
+      "Type": "winget",
+      "Id": "REALiX.HWiNFO",
+      "Category": "diagnostics",
+      "VersionPicker": true,
+      "Logo": "logo/hwinfo.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Rufus",
+      "Type": "winget",
+      "Id": "Rufus.Rufus",
+      "Category": "utilities",
+      "VersionPicker": true,
+      "Logo": "logo/rufus.png",
+      "Enabled": true
+    },
+    {
+      "Name": "AnyDesk",
+      "Type": "winget",
+      "Id": "AnyDesk.AnyDesk",
+      "Category": "remote",
+      "VersionPicker": true,
+      "Logo": "logo/anydesk.png",
+      "Enabled": false
+    },
+    {
+      "Name": "Tailscale",
+      "Type": "winget",
+      "Id": "Tailscale.Tailscale",
+      "Category": "remote",
+      "VersionPicker": true,
+      "Logo": "logo/tailscale.png",
+      "Enabled": false
+    },
+    {
+      "Name": "Slack",
+      "Type": "winget",
+      "Id": "SlackTechnologies.Slack",
+      "Category": "communication",
+      "VersionPicker": true,
+      "Logo": "logo/slack.png",
       "Enabled": true
     },
     {
       "Name": "Zoom Workplace",
       "Type": "winget",
       "Id": "Zoom.Zoom",
+      "Category": "communication",
       "VersionPicker": true,
       "Logo": "logo/zoom.png",
       "Enabled": true
@@ -92,8 +220,9 @@
     {
       "Name": "WhatsApp",
       "Type": "winget",
-      "Id": "WhatsApp.WhatsApp",
-      "VersionPicker": true,
+      "Id": "9NKSQGP7F2NH",
+      "Source": "msstore",
+      "Category": "communication",
       "Logo": "logo/whatsapp.png",
       "Enabled": true
     },
@@ -101,6 +230,7 @@
       "Name": "LibreOffice",
       "Type": "winget",
       "Id": "TheDocumentFoundation.LibreOffice",
+      "Category": "office",
       "VersionPicker": true,
       "Logo": "logo/libreoffice.png",
       "Enabled": true
@@ -109,6 +239,7 @@
       "Name": "WinRAR",
       "Type": "winget",
       "Id": "RARLab.WinRAR",
+      "Category": "utilities",
       "VersionPicker": true,
       "Logo": "logo/winrar.png",
       "Enabled": true
@@ -117,16 +248,9 @@
       "Name": "NAPS2",
       "Type": "winget",
       "Id": "Cyanfish.NAPS2",
+      "Category": "utilities",
       "VersionPicker": true,
       "Logo": "logo/naps2.png",
-      "Enabled": true
-    },
-    {
-      "Name": "PuTTY",
-      "Type": "winget",
-      "Id": "PuTTY.PuTTY",
-      "VersionPicker": true,
-      "Logo": "logo/putty.png",
       "Enabled": true
     },
     {
@@ -134,7 +258,62 @@
       "Type": "winget",
       "Source": "msstore",
       "Id": "9WZDNCRFJ3PV",
+      "Category": "utilities",
       "Logo": "logo/windows-scan.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Microsoft Visual C++ 2015-2022 Redistributable (x64)",
+      "Type": "winget",
+      "Id": "Microsoft.VCRedist.2015+.x64",
+      "Category": "runtimes",
+      "VersionPicker": true,
+      "Logo": "logo/visual-cpp.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Microsoft Visual C++ 2015-2022 Redistributable (x86)",
+      "Type": "winget",
+      "Id": "Microsoft.VCRedist.2015+.x86",
+      "Category": "runtimes",
+      "VersionPicker": true,
+      "Logo": "logo/visual-cpp.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Microsoft .NET Desktop Runtime 8",
+      "Type": "winget",
+      "Id": "Microsoft.DotNet.DesktopRuntime.8",
+      "Category": "runtimes",
+      "VersionPicker": true,
+      "Logo": "logo/dotnet-desktop-runtime.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Microsoft Edge WebView2 Runtime",
+      "Type": "winget",
+      "Id": "Microsoft.EdgeWebView2Runtime",
+      "Category": "runtimes",
+      "VersionPicker": true,
+      "Logo": "logo/webview2.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Microsoft DirectX End-User Runtime",
+      "Type": "winget",
+      "Id": "Microsoft.DirectX",
+      "Category": "runtimes",
+      "VersionPicker": true,
+      "Logo": "logo/directx.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Eclipse Temurin JRE 21",
+      "Type": "winget",
+      "Id": "EclipseAdoptium.Temurin.21.JRE",
+      "Category": "runtimes",
+      "VersionPicker": true,
+      "Logo": "logo/temurin.png",
       "Enabled": true
     }
   ],
@@ -143,6 +322,7 @@
       "Name": "Microsoft Office Home Business 2024 (Francais)",
       "Path": "Installers\\Office_HomeBusiness2024_FR_x64.exe",
       "MatchName": "Microsoft Office Home and Business 2024",
+      "Category": "office",
       "Logo": "logo/microsoft-office.png",
       "Url": "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=HomeBusiness2024Retail&platform=x64&language=fr-fr&version=O16GA",
       "Arguments": [],
@@ -152,10 +332,94 @@
       "Name": "OrbitConvert",
       "Path": "Installers\\OrbitConvert-0.3.7-win-x64.msi",
       "MatchName": "OrbitConvert",
+      "Category": "utilities",
       "Logo": "logo/orbitconvert.png",
       "Url": "https://github.com/AbdlrhmanDev/OrbitConvert/releases/download/v0.3.7/OrbitConvert-0.3.7-win-x64.msi",
       "Arguments": ["/qn", "/norestart"],
       "Enabled": true
+    }
+  ],
+  "Categories": [
+    { "Id": "browsers", "NameEn": "Browsers", "NameFr": "Navigateurs" },
+    { "Id": "communication", "NameEn": "Communication", "NameFr": "Communication" },
+    { "Id": "development", "NameEn": "Development", "NameFr": "Developpement" },
+    { "Id": "diagnostics", "NameEn": "Diagnostics", "NameFr": "Diagnostics" },
+    { "Id": "media", "NameEn": "Media", "NameFr": "Medias" },
+    { "Id": "office", "NameEn": "Office and PDF", "NameFr": "Bureau et PDF" },
+    { "Id": "remote", "NameEn": "Remote access", "NameFr": "Acces distant" },
+    { "Id": "runtimes", "NameEn": "Runtimes", "NameFr": "Composants d'execution" },
+    { "Id": "security", "NameEn": "Security", "NameFr": "Securite" },
+    { "Id": "utilities", "NameEn": "Utilities", "NameFr": "Utilitaires" }
+  ],
+  "Profiles": [
+    {
+      "Id": "office",
+      "NameEn": "Office",
+      "NameFr": "Bureau",
+      "Apps": [
+        "Google.Chrome",
+        "Mozilla.Firefox",
+        "Adobe.Acrobat.Reader.64-bit",
+        "TheDocumentFoundation.LibreOffice",
+        "Microsoft Office Home Business 2024 (Francais)",
+        "Zoom.Zoom",
+        "9NKSQGP7F2NH",
+        "7zip.7zip",
+        "VideoLAN.VLC",
+        "Cyanfish.NAPS2",
+        "9WZDNCRFJ3PV",
+        "OrbitConvert"
+      ]
+    },
+    {
+      "Id": "developer",
+      "NameEn": "Developer",
+      "NameFr": "Developpeur",
+      "Apps": [
+        "Microsoft.VisualStudioCode",
+        "Git.Git",
+        "Microsoft.PowerToys",
+        "Notepad++.Notepad++",
+        "PuTTY.PuTTY",
+        "7zip.7zip",
+        "Microsoft.VCRedist.2015+.x64",
+        "Microsoft.VCRedist.2015+.x86",
+        "Microsoft.DotNet.DesktopRuntime.8",
+        "Microsoft.EdgeWebView2Runtime"
+      ]
+    },
+    {
+      "Id": "technician",
+      "NameEn": "Technician",
+      "NameFr": "Technicien",
+      "Apps": [
+        "voidtools.Everything",
+        "CrystalDewWorld.CrystalDiskInfo",
+        "REALiX.HWiNFO",
+        "Rufus.Rufus",
+        "PuTTY.PuTTY",
+        "7zip.7zip",
+        "RARLab.WinRAR",
+        "SumatraPDF.SumatraPDF",
+        "ShareX.ShareX",
+        "AnyDesk.AnyDesk",
+        "Tailscale.Tailscale"
+      ]
+    },
+    {
+      "Id": "minimal",
+      "NameEn": "Minimal",
+      "NameFr": "Minimal",
+      "Apps": [
+        "Google.Chrome",
+        "7zip.7zip",
+        "VideoLAN.VLC",
+        "Adobe.Acrobat.Reader.64-bit",
+        "Microsoft.VCRedist.2015+.x64",
+        "Microsoft.VCRedist.2015+.x86",
+        "Microsoft.DotNet.DesktopRuntime.8",
+        "Microsoft.EdgeWebView2Runtime"
+      ]
     }
   ],
   "PrinterDrivers": [

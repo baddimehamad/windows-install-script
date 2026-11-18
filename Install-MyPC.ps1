@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$OriginalUserSid
 )
 
@@ -42,6 +42,7 @@ $ProgressPreference = 'SilentlyContinue'
 Import-Module (Join-Path $scriptRoot 'Setup.Core.psm1') -Force
 
 $script:Results = [System.Collections.Generic.List[object]]::new()
+$script:SessionResults = [System.Collections.Generic.List[object]]::new()
 
 # Core progress goes through this sink. Console colours match the old script.
 Set-SetupLogSink {
@@ -63,6 +64,7 @@ function Show-Result {
     param($Result)
     if ($null -eq $Result) { return }
     [void]$script:Results.Add($Result)
+    [void]$script:SessionResults.Add($Result)
     if ($Result.Skipped) {
         if (-not [string]::IsNullOrWhiteSpace($Result.Message)) {
             Write-Host $Result.Message -ForegroundColor DarkYellow
@@ -156,7 +158,10 @@ function Invoke-RenameCurrentUser {
 }
 
 function Select-SoftwareToInstall {
-    param([AllowEmptyCollection()][object[]]$Items)
+    param(
+        [AllowEmptyCollection()][object[]]$Items,
+        [AllowEmptyCollection()][object[]]$Profiles = @()
+    )
 
     if ($Items.Count -eq 0) {
         Write-Host 'No enabled software entries were found in Software.json.' -ForegroundColor Yellow
@@ -165,17 +170,51 @@ function Select-SoftwareToInstall {
 
     Write-Host ''
     Write-Host 'SOFTWARE LIST - enter numbers separated by commas (example: 1,3,5).' -ForegroundColor Cyan
-    Write-Host 'Enter A to select all enabled items, or 0 to skip software installation.' -ForegroundColor Cyan
+    Write-Host 'Enter A to select all enabled items, P for a profile, or 0 to skip software installation.' -ForegroundColor Cyan
+    if ($Profiles.Count -gt 0) {
+        Write-Host ('Profiles: {0}' -f (($Profiles | ForEach-Object { $_.NameEn }) -join ', ')) -ForegroundColor DarkCyan
+    }
     for ($index = 0; $index -lt $Items.Count; $index++) {
         $number = $index + 1
         $kindLabel = if ($Items[$index].Kind -eq 'winget') { 'Winget' } else { 'Local' }
-        Write-Host (" {0,2}. [{1}] {2} - {3}" -f $number, $kindLabel, $Items[$index].Name, $Items[$index].Detail)
+        $categoryLabel = [string]$Items[$index].CategoryNameEn
+        if ([string]::IsNullOrWhiteSpace($categoryLabel)) { $categoryLabel = 'Other' }
+        Write-Host (" {0,2}. [{1}][{2}] {3} - {4}" -f $number, $kindLabel, $categoryLabel, $Items[$index].Name, $Items[$index].Detail)
     }
 
     while ($true) {
         $response = ((Read-Host 'Software numbers') | ForEach-Object { "$_".Trim() })
         if ([string]::IsNullOrWhiteSpace($response) -or $response -eq '0') { return @() }
         if ($response -match '^(?i:a|all)$') { return $Items }
+
+        if ($response -match '^(?i:p|profile|profil)$') {
+            if ($Profiles.Count -eq 0) {
+                Write-Host 'No profiles are defined in Software.json.' -ForegroundColor Yellow
+                continue
+            }
+            Write-Host 'PROFILES / PROFILS :' -ForegroundColor Cyan
+            for ($index = 0; $index -lt $Profiles.Count; $index++) {
+                Write-Host (" {0,2}. {1} / {2} ({3} apps)" -f ($index + 1), $Profiles[$index].NameEn, $Profiles[$index].NameFr, $Profiles[$index].Apps.Count)
+            }
+            Write-Host '  0. Cancel / Annuler'
+            $profileChoice = ((Read-Host 'Profile number / Numero') | ForEach-Object { "$_".Trim() })
+            if ([string]::IsNullOrWhiteSpace($profileChoice) -or $profileChoice -eq '0') { continue }
+            if ($profileChoice -notmatch '^\d+$' -or [int]$profileChoice -lt 1 -or [int]$profileChoice -gt $Profiles.Count) {
+                Write-Host 'Invalid profile selection.' -ForegroundColor Yellow
+                continue
+            }
+            $profile = $Profiles[[int]$profileChoice - 1]
+            $selected = @($Items | Where-Object {
+                $candidate = $_
+                @($profile.Apps | Where-Object { $_ -eq [string]$candidate.Name -or $_ -eq [string]$candidate.Id }).Count -gt 0
+            })
+            if ($selected.Count -eq 0) {
+                Write-Host ('No enabled catalog entry matches the {0} profile.' -f $profile.NameEn) -ForegroundColor Yellow
+                continue
+            }
+            Write-Host ('Profile {0}: {1} application(s) selected.' -f $profile.NameEn, $selected.Count) -ForegroundColor Green
+            return $selected
+        }
 
         $tokens = $response -split '[,;\s]+'
         $indices = [System.Collections.Generic.List[int]]::new()
@@ -193,7 +232,7 @@ function Select-SoftwareToInstall {
             if (-not $indices.Contains($number)) { [void]$indices.Add($number) }
         }
         if ($invalid -or $indices.Count -eq 0) {
-            Write-Host ("Invalid selection. Enter numbers from 1 to {0}, A, or 0." -f $Items.Count) -ForegroundColor Yellow
+            Write-Host ("Invalid selection. Enter numbers from 1 to {0}, A, P, or 0." -f $Items.Count) -ForegroundColor Yellow
             continue
         }
 
@@ -207,10 +246,46 @@ function Invoke-InstallSoftware {
     param([Parameter(Mandatory = $true)]$Config)
 
     $availableSoftware = @(Get-SoftwareCatalog -Config $Config)
-    $chosenSoftware = @(Select-SoftwareToInstall -Items $availableSoftware)
+    $profiles = @(Get-SetupProfiles -Config $Config)
+    $chosenSoftware = @(Select-SoftwareToInstall -Items $availableSoftware -Profiles $profiles)
     if ($chosenSoftware.Count -eq 0) {
         Write-Host 'No software selected.' -ForegroundColor DarkYellow
         return
+    }
+
+    Write-Host ''
+    Write-Host ('The following {0} item(s) will be installed:' -f $chosenSoftware.Count) -ForegroundColor Cyan
+    foreach ($chosen in $chosenSoftware) {
+        Write-Host (' - {0}' -f $chosen.Name)
+    }
+    $confirm = ((Read-Host 'Continue? [Y/n] / Continuer ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    if (-not [string]::IsNullOrWhiteSpace($confirm) -and $confirm -notin @('y', 'yes', 'o', 'oui')) {
+        Write-Host 'Installation cancelled. / Annule.' -ForegroundColor DarkYellow
+        return
+    }
+
+    Write-Host ''
+    Write-Host 'Running preflight checks... / Verifications prealables...' -ForegroundColor Cyan
+    $preflight = Test-SetupPreflight
+    foreach ($check in @($preflight.Checks)) {
+        $color = switch ($check.Status) {
+            'Pass' { 'Green' }
+            'Warn' { 'Yellow' }
+            default { 'Red' }
+        }
+        Write-Host ("  [{0}] {1}: {2}" -f $check.Status, $check.Name, $check.Message) -ForegroundColor $color
+    }
+    if (-not $preflight.Success) {
+        Write-Host 'A blocking preflight check failed. No software was installed.' -ForegroundColor Red
+        Write-Host 'Une verification bloquante a echoue. Aucun logiciel installe.' -ForegroundColor Red
+        [void]$script:SessionResults.Add($preflight)
+        return
+    }
+    [void]$script:SessionResults.Add($preflight)
+
+    $restoreAnswer = ((Read-Host 'Create a System Restore point before installing? [y/N] / Point de restauration ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    if ($restoreAnswer -in @('y', 'yes', 'o', 'oui')) {
+        Show-Result (New-SetupRestorePoint -Description 'Windows Automatic Setup - before software installation')
     }
 
     $wingetChosen = @($chosenSoftware | Where-Object { $_.Kind -eq 'winget' })
@@ -381,6 +456,27 @@ function Invoke-RenamePrinter {
     Show-Result (Rename-SetupPrinter -Name $oldName -NewName $newName)
 }
 
+function Invoke-SetDefaultPrinter {
+    $printers = @(Show-PrinterList)
+    if ($printers.Count -eq 0) { return }
+    $printer = Select-LocalUserByNumber -Users $printers -Prompt 'Printer number / Numero (0 = cancel)'
+    if ($null -eq $printer) { return }
+    Show-Result (Set-SetupDefaultPrinter -Name $printer.Name)
+}
+
+function Invoke-TestPrinterPage {
+    $printers = @(Show-PrinterList)
+    if ($printers.Count -eq 0) { return }
+    $printer = Select-LocalUserByNumber -Users $printers -Prompt 'Printer number / Numero (0 = cancel)'
+    if ($null -eq $printer) { return }
+    $confirm = ((Read-Host ("Send a test page to '{0}'? [y/N]" -f $printer.Name)) | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    if ($confirm -notin @('y', 'yes', 'o', 'oui')) {
+        Write-Host 'Test cancelled. / Annule.' -ForegroundColor DarkYellow
+        return
+    }
+    Show-Result (Test-SetupPrinterPage -Name $printer.Name)
+}
+
 function Show-PrinterMenu {
     param([Parameter(Mandatory = $true)]$Config)
 
@@ -394,6 +490,8 @@ function Show-PrinterMenu {
         Write-Host '  1. Install a printer (TCP/IP: manufacturer, IP, name)'
         Write-Host '  2. List installed printers'
         Write-Host '  3. Rename a printer'
+        Write-Host '  4. Set the default printer'
+        Write-Host '  5. Send a test page'
         Write-Host '  0. Back to main menu / Retour'
         $sub = ((Read-Host 'Printer option') | ForEach-Object { "$_".Trim() })
         if ($sub -match '^(?i:0|q|quit|exit|b|back)$' -or [string]::IsNullOrWhiteSpace($sub)) {
@@ -403,7 +501,9 @@ function Show-PrinterMenu {
             '1' { Invoke-InstallPrinter -Config $Config }
             '2' { [void](Show-PrinterList); Read-Host 'Press Enter to continue / Entree pour continuer' | Out-Null }
             '3' { Invoke-RenamePrinter }
-            default { Write-Host 'Invalid printer option. Use 1, 2, 3, or 0.' -ForegroundColor Yellow }
+            '4' { Invoke-SetDefaultPrinter }
+            '5' { Invoke-TestPrinterPage }
+            default { Write-Host 'Invalid printer option. Use 1, 2, 3, 4, 5, or 0.' -ForegroundColor Yellow }
         }
     }
 }
@@ -446,7 +546,7 @@ function Select-LocalUserByNumber {
         return $null
     }
     if ($choice -notmatch '^\d+$' -or [int]$choice -lt 1 -or [int]$choice -gt $Users.Count) {
-        Write-Host 'Invalid user selection.' -ForegroundColor Yellow
+        Write-Host 'Invalid selection. / Selection invalide.' -ForegroundColor Yellow
         return $null
     }
     return $Users[[int]$choice - 1]
@@ -605,6 +705,105 @@ function Invoke-SetUserEnabled {
     Show-Result (Set-SetupLocalUserEnabled -UserName $account.Name -Enabled $newState -ProtectedSid $script:OriginalUserSid)
 }
 
+function Invoke-CreateLocalUser {
+    Write-Host ''
+    Write-Host 'CREATE A LOCAL USER / CREER UN UTILISATEUR LOCAL' -ForegroundColor Cyan
+    $userName = ((Read-Host 'Account name (1-20 characters, blank to cancel) / Nom du compte') | ForEach-Object { "$_".Trim() })
+    if ([string]::IsNullOrWhiteSpace($userName)) {
+        Write-Host 'User creation cancelled.' -ForegroundColor DarkYellow
+        return
+    }
+    $validation = Test-LocalAccountName -Name $userName
+    if ($null -ne $validation) {
+        Write-Host $validation -ForegroundColor Yellow
+        return
+    }
+    if ($null -ne (Get-LocalUser -Name $userName -ErrorAction SilentlyContinue)) {
+        Write-Host ("A local account named '{0}' already exists." -f $userName) -ForegroundColor Yellow
+        Write-Host 'Un compte local de ce nom existe deja.' -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host 'Password input is hidden. Minimum 8 characters. / Saisie masquee. 8 caracteres minimum.' -ForegroundColor Yellow
+    $securePassword = Read-Host ("Enter a password for '{0}' (blank to cancel)" -f $userName) -AsSecureString
+    if ($null -eq $securePassword -or $securePassword.Length -eq 0) {
+        Write-Host 'User creation cancelled (no password).' -ForegroundColor DarkYellow
+        return
+    }
+    $confirmPassword = Read-Host 'Confirm the password / Confirmez le mot de passe' -AsSecureString
+    $plainFirst = [System.Net.NetworkCredential]::new('', $securePassword).Password
+    $plainConfirm = [System.Net.NetworkCredential]::new('', $confirmPassword).Password
+    try {
+        if ($plainFirst -cne $plainConfirm) {
+            Write-Host 'Passwords do not match. Nothing was changed. / Mots de passe differents.' -ForegroundColor Yellow
+            return
+        }
+    } finally {
+        $plainFirst = $null
+        $plainConfirm = $null
+    }
+
+    $adminAnswer = ((Read-Host 'Add the account to the Administrators group? [y/N] / Administrateur ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    $isAdmin = $adminAnswer -in @('y', 'yes', 'o', 'oui')
+    $expiresAnswer = ((Read-Host 'Password never expires? [y/N] / Le mot de passe n''expire jamais ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    $neverExpires = $expiresAnswer -in @('y', 'yes', 'o', 'oui')
+    $restoreAnswer = ((Read-Host 'Create a System Restore point first? [Y/n] / Point de restauration ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    $createRestore = [string]::IsNullOrWhiteSpace($restoreAnswer) -or $restoreAnswer -in @('y', 'yes', 'o', 'oui')
+
+    $role = if ($isAdmin) { 'administrator / administrateur' } else { 'standard user / utilisateur standard' }
+    Write-Host ("About to create '{0}' ({1})." -f $userName, $role) -ForegroundColor Yellow
+    $confirm = ((Read-Host 'Type CREATE/CREER to continue') | ForEach-Object { "$_".Trim().ToUpperInvariant() })
+    if ($confirm -notin @('CREATE', 'CREER')) {
+        Write-Host 'User creation cancelled.' -ForegroundColor DarkYellow
+        return
+    }
+
+    $parameters = @{
+        UserName             = $userName
+        Password             = $securePassword
+        Administrator        = $isAdmin
+        PasswordNeverExpires = $neverExpires
+    }
+    if ($createRestore) { $parameters['CreateRestorePoint'] = $true }
+    Show-Result (New-SetupLocalUser @parameters)
+    $securePassword = $null
+    $confirmPassword = $null
+}
+
+function Invoke-DeleteLocalUser {
+    $users = @(Show-LocalUserList)
+    if ($users.Count -eq 0) { return }
+    $account = Select-LocalUserByNumber -Users $users -Prompt 'User number to delete / Numero a supprimer (0 = cancel)'
+    if ($null -eq $account) { return }
+
+    if ($account.SID -match '-500$') {
+        Write-Host 'The built-in Administrator account cannot be deleted here.' -ForegroundColor Red
+        Write-Host 'Le compte administrateur integre ne peut pas etre supprime ici.' -ForegroundColor Red
+        return
+    }
+    if (-not [string]::IsNullOrWhiteSpace($script:OriginalUserSid) -and ($account.SID -eq $script:OriginalUserSid)) {
+        Write-Host ("'{0}' is the account you are signed in with. Delete it from another administrator account." -f $account.Name) -ForegroundColor Red
+        Write-Host 'Utilisez un autre compte administrateur pour le supprimer.' -ForegroundColor Red
+        return
+    }
+
+    Write-Host ("About to delete local account '{0}'. Its profile folder and files are kept." -f $account.Name) -ForegroundColor Yellow
+    $confirm = ((Read-Host ("Type DELETE/SUPPRIMER to delete '{0}', or press Enter to cancel" -f $account.Name)) | ForEach-Object { "$_".Trim().ToUpperInvariant() })
+    if ($confirm -notin @('DELETE', 'SUPPRIMER')) {
+        Write-Host 'User deletion cancelled.' -ForegroundColor DarkYellow
+        return
+    }
+    $restoreAnswer = ((Read-Host 'Create a System Restore point first? [Y/n] / Point de restauration ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    $createRestore = [string]::IsNullOrWhiteSpace($restoreAnswer) -or $restoreAnswer -in @('y', 'yes', 'o', 'oui')
+
+    $parameters = @{
+        UserName     = $account.Name
+        ProtectedSid = $script:OriginalUserSid
+    }
+    if ($createRestore) { $parameters['CreateRestorePoint'] = $true }
+    Show-Result (Remove-SetupLocalUser @parameters)
+}
+
 function Show-UserMenu {
     if (-not (Get-Command Get-LocalUser -ErrorAction SilentlyContinue)) {
         Write-Host 'Local user cmdlets are not available on this Windows edition.' -ForegroundColor Red
@@ -618,6 +817,8 @@ function Show-UserMenu {
         Write-Host "  3. Change a user's password"
         Write-Host "  4. Change a user's groups (member of)"
         Write-Host '  5. Enable or disable a user'
+        Write-Host '  6. Create a local user'
+        Write-Host '  7. Delete a local user (profile folder is kept)'
         Write-Host '  0. Back to main menu / Retour'
         $sub = ((Read-Host 'Users option') | ForEach-Object { "$_".Trim() })
         if ($sub -match '^(?i:0|q|quit|exit|b|back)$' -or [string]::IsNullOrWhiteSpace($sub)) {
@@ -629,9 +830,263 @@ function Show-UserMenu {
             '3' { Invoke-SetLocalUserPassword }
             '4' { Invoke-EditUserGroups }
             '5' { Invoke-SetUserEnabled }
-            default { Write-Host 'Invalid users option. Use 1, 2, 3, 4, 5, or 0.' -ForegroundColor Yellow }
+            '6' { Invoke-CreateLocalUser }
+            '7' { Invoke-DeleteLocalUser }
+            default { Write-Host 'Invalid users option. Use 1, 2, 3, 4, 5, 6, 7, or 0.' -ForegroundColor Yellow }
         }
     }
+}
+
+function Show-SetupPreflight {
+    Write-Host ''
+    Write-Host 'PREFLIGHT CHECKS / VERIFICATIONS PREALABLES' -ForegroundColor Cyan
+    $preflight = Test-SetupPreflight
+    foreach ($check in @($preflight.Checks)) {
+        $color = switch ($check.Status) {
+            'Pass' { 'Green' }
+            'Warn' { 'Yellow' }
+            default { 'Red' }
+        }
+        Write-Host ("  [{0}] {1}: {2}" -f $check.Status, $check.Name, $check.Message) -ForegroundColor $color
+    }
+    Write-Host ''
+    if ($preflight.Success) {
+        Write-Host 'No blocking problem was found. / Aucun probleme bloquant.' -ForegroundColor Green
+    } else {
+        Write-Host 'A blocking problem was found. Fix it before installing or changing system settings.' -ForegroundColor Red
+    }
+    [void]$script:SessionResults.Add($preflight)
+}
+
+function Invoke-CreateRestorePoint {
+    Write-Host ''
+    Write-Host 'SYSTEM RESTORE POINT / POINT DE RESTAURATION' -ForegroundColor Cyan
+    $support = Test-SetupRestorePointSupport
+    Write-Host ('Support: {0}' -f $support.Reason) -ForegroundColor DarkGray
+    $confirm = ((Read-Host 'Create a restore point now? [y/N] / Creer un point de restauration ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    if ($confirm -notin @('y', 'yes', 'o', 'oui')) {
+        Write-Host 'Restore point cancelled.' -ForegroundColor DarkYellow
+        return
+    }
+    Show-Result (New-SetupRestorePoint -Description 'Windows Automatic Setup - manual checkpoint')
+}
+
+function Invoke-ExportReport {
+    param([Parameter(Mandatory = $true)]$Config)
+    Write-Host ''
+    Write-Host 'EXPORT REPORT / EXPORTER LE RAPPORT' -ForegroundColor Cyan
+    $result = Export-SetupReport -Results @($script:SessionResults) -Config $Config -Format Html
+    if ($result.Success) {
+        Write-Host $result.Message -ForegroundColor Green
+    } else {
+        Write-Host $result.Message -ForegroundColor Red
+    }
+}
+
+function Show-SystemReport {
+    Write-Host ''
+    Write-Host 'SYSTEM STATUS (READ-ONLY) / ETAT DU SYSTEME (LECTURE SEULE)' -ForegroundColor Cyan
+    $check = ((Read-Host 'Check Windows Update now? This can take several minutes. [y/N] / Verifier Windows Update ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    $includeUpdates = $check -in @('y', 'yes', 'o', 'oui')
+
+    Write-Host 'Reading system status... / Lecture de l''etat du systeme...' -ForegroundColor DarkGray
+    $dashboard = Get-SetupSystemDashboard -CheckWindowsUpdate:$includeUpdates
+
+    foreach ($section in @($dashboard.Sections)) {
+        Write-Host ''
+        Write-Host ('== {0} ==' -f $section.Title) -ForegroundColor Cyan
+        foreach ($row in @($section.Rows)) {
+            $label = [string]$row.Label
+            if ([string]::IsNullOrWhiteSpace($label)) { $label = [string]$row.LabelKey }
+            $value = [string]$row.Value
+            if ([string]::IsNullOrWhiteSpace($value) -and -not [string]::IsNullOrWhiteSpace([string]$row.ValueKey)) { $value = [string]$row.ValueKey }
+            $color = switch ([string]$row.Tone) {
+                'Ok' { 'Green' }
+                'Warning' { 'Yellow' }
+                'Error' { 'Red' }
+                'Muted' { 'DarkGray' }
+                default { 'White' }
+            }
+            Write-Host ("  {0}: {1}" -f $label, $value) -ForegroundColor $color
+            if (-not [string]::IsNullOrWhiteSpace([string]$row.Detail)) {
+                Write-Host ("    {0}" -f $row.Detail) -ForegroundColor DarkGray
+            }
+        }
+    }
+
+    Write-Host ''
+    $summaryColor = if ($dashboard.ErrorCount -gt 0) { 'Red' } elseif ($dashboard.WarningCount -gt 0) { 'Yellow' } else { 'Green' }
+    Write-Host ("Warnings: {0} | Errors: {1} / Avertissements : {0} | Erreurs : {1}" -f $dashboard.WarningCount, $dashboard.ErrorCount) -ForegroundColor $summaryColor
+
+    $export = ((Read-Host 'Export this report as HTML? [y/N] / Exporter ce rapport en HTML ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    if ($export -in @('y', 'yes', 'o', 'oui')) {
+        $result = Export-SetupSystemReport -Dashboard $dashboard -Format Html
+        if ($result.Success) {
+            Write-Host $result.Message -ForegroundColor Green
+        } else {
+            Write-Host $result.Message -ForegroundColor Red
+        }
+    }
+}
+
+function Show-SystemMaintenance {
+    $planLabels = @{
+        Balanced        = 'Balanced'
+        HighPerformance = 'High performance'
+        PowerSaver      = 'Power saver'
+    }
+    while ($true) {
+        Clear-Host
+        Write-Host '========================================================' -ForegroundColor Cyan
+        Write-Host '              SYSTEM MAINTENANCE' -ForegroundColor Cyan
+        Write-Host '========================================================' -ForegroundColor Cyan
+        $status = Get-SetupPowerStatus
+        Write-Host ("Power plan: {0} | Hibernation: {1} | Fast startup: {2}" -f `
+            $status.ActivePlan, $status.Hibernate, $status.FastStartup) -ForegroundColor DarkGray
+        Write-Host ''
+        Write-Host '  1. Set the power plan'
+        Write-Host '  2. Turn hibernation on or off'
+        Write-Host '  3. Turn fast startup on or off'
+        Write-Host '  4. Set a DNS preset'
+        Write-Host '  5. Flush the DNS cache'
+        Write-Host '  6. Test a host (ping, optional traceroute)'
+        Write-Host '  7. Analyze or clean temporary files'
+        Write-Host '  8. Set the time zone'
+        Write-Host '  0. Back to main menu / Retour'
+        Write-Host ''
+
+        $choice = ((Read-Host 'Enter option / Entree') | ForEach-Object { "$_".Trim() })
+        switch ($choice) {
+            '0' { return }
+            '1' {
+                $available = @($status.AvailablePlans)
+                if ($available.Count -eq 0) { $available = @('Balanced') }
+                $keys = @()
+                $number = 1
+                foreach ($key in @('Balanced', 'HighPerformance', 'PowerSaver')) {
+                    if ($available -notcontains $key) { continue }
+                    Write-Host ("  {0}. {1}" -f $number, $planLabels[$key])
+                    $keys += $key
+                    $number++
+                }
+                $pick = ((Read-Host 'Plan number / Numero') | ForEach-Object { "$_".Trim() })
+                $index = 0
+                if ([int]::TryParse($pick, [ref]$index) -and $index -ge 1 -and $index -le $keys.Count) {
+                    Show-Result (Set-SetupPowerPlan -Name $keys[$index - 1])
+                } else {
+                    Write-Host 'Invalid plan number.' -ForegroundColor Yellow
+                }
+                Read-Host 'Press Enter / Entree'
+            }
+            '2' {
+                if ($status.Hibernate -eq 'On') {
+                    $answer = Read-Host 'Hibernation is on. Turn it off? [y/N] / La desactiver ?'
+                    if ($answer -in @('y', 'yes', 'o', 'oui')) { Show-Result (Set-SetupHibernation -State 'Off') }
+                } else {
+                    $answer = Read-Host 'Hibernation is off. Turn it on? [y/N] / L''activer ?'
+                    if ($answer -in @('y', 'yes', 'o', 'oui')) { Show-Result (Set-SetupHibernation -State 'On') }
+                }
+                Read-Host 'Press Enter / Entree'
+            }
+            '3' {
+                if ($status.FastStartup -eq 'On') {
+                    $answer = Read-Host 'Fast startup is on. Turn it off? [y/N] / Le desactiver ?'
+                    if ($answer -in @('y', 'yes', 'o', 'oui')) { Show-Result (Set-SetupFastStartup -State 'Off') }
+                } else {
+                    $answer = Read-Host 'Fast startup is off. Turn it on? [y/N] / L''activer ?'
+                    if ($answer -in @('y', 'yes', 'o', 'oui')) { Show-Result (Set-SetupFastStartup -State 'On') }
+                }
+                Read-Host 'Press Enter / Entree'
+            }
+            '4' {
+                $network = Get-SetupNetworkStatus -SkipInternet
+                $adapters = @($network.Adapters)
+                if ($adapters.Count -eq 0) {
+                    Write-Host 'No active network adapter was found.' -ForegroundColor Yellow
+                    Read-Host 'Press Enter / Entree'
+                    continue
+                }
+                $number = 1
+                foreach ($adapter in $adapters) {
+                    Write-Host ("  {0}. {1} ({2})" -f $number, $adapter.Name, $adapter.IPv4)
+                    $number++
+                }
+                $pick = ((Read-Host 'Adapter number / Numero de carte') | ForEach-Object { "$_".Trim() })
+                $index = 0
+                if (-not [int]::TryParse($pick, [ref]$index) -or $index -lt 1 -or $index -gt $adapters.Count) {
+                    Write-Host 'Invalid adapter number.' -ForegroundColor Yellow
+                    Read-Host 'Press Enter / Entree'
+                    continue
+                }
+                Write-Host '  1. Automatic (DHCP)'
+                Write-Host '  2. Cloudflare (1.1.1.1)'
+                Write-Host '  3. Google (8.8.8.8)'
+                Write-Host '  4. Quad9 (9.9.9.9)'
+                $presetPick = ((Read-Host 'DNS preset number / Numero de preset') | ForEach-Object { "$_".Trim() })
+                $preset = switch ($presetPick) {
+                    '1' { 'Automatic' }
+                    '2' { 'Cloudflare' }
+                    '3' { 'Google' }
+                    '4' { 'Quad9' }
+                    default { '' }
+                }
+                if ([string]::IsNullOrWhiteSpace($preset)) {
+                    Write-Host 'Invalid preset number.' -ForegroundColor Yellow
+                } else {
+                    $adapter = $adapters[$index - 1]
+                    if (Show-ConfirmConsole ("Change the DNS servers of '{0}' to {1}?" -f $adapter.Name, $preset)) {
+                        Show-Result (Set-SetupDnsPreset -AdapterName $adapter.Name -Preset $preset)
+                    }
+                }
+                Read-Host 'Press Enter / Entree'
+            }
+            '5' {
+                Show-Result (Clear-SetupDnsCache)
+                Read-Host 'Press Enter / Entree'
+            }
+            '6' {
+                $target = ((Read-Host 'Host or IP (default 1.1.1.1) / Hote ou IP') | ForEach-Object { "$_".Trim() })
+                if ([string]::IsNullOrWhiteSpace($target)) { $target = '1.1.1.1' }
+                $trace = ((Read-Host 'Show traceroute? [y/N] / Afficher le trace ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+                $result = Test-SetupNetworkPath -Target $target -Traceroute:($trace -in @('y', 'yes', 'o', 'oui'))
+                Show-Result $result
+                if ($result.Success -and @($result.Data.Path).Count -gt 0) {
+                    foreach ($line in @($result.Data.Path)) { Write-Host $line -ForegroundColor DarkGray }
+                }
+                Read-Host 'Press Enter / Entree'
+            }
+            '7' {
+                $preview = Clear-SetupTempFiles -OlderThanDays 1 -DryRun
+                Show-Result $preview
+                if ($preview.Success) {
+                    $answer = ((Read-Host 'Delete these files? [y/N] / Supprimer ces fichiers ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+                    if ($answer -in @('y', 'yes', 'o', 'oui')) {
+                        Show-Result (Clear-SetupTempFiles -OlderThanDays 1)
+                    }
+                }
+                Read-Host 'Press Enter / Entree'
+            }
+            '8' {
+                try {
+                    $current = [TimeZoneInfo]::Local
+                    Write-Host ("Current: {0} ({1})" -f $current.Id, $current.DisplayName) -ForegroundColor DarkGray
+                } catch { }
+                $id = ((Read-Host 'Windows time zone ID (example: Romance Standard Time) / Identifiant') | ForEach-Object { "$_".Trim() })
+                if (-not [string]::IsNullOrWhiteSpace($id)) { Show-Result (Set-SetupTimeZone -Id $id) }
+                Read-Host 'Press Enter / Entree'
+            }
+            default {
+                Write-Host 'Invalid selection. Use 0-8.' -ForegroundColor Yellow
+                Read-Host 'Press Enter / Entree'
+            }
+        }
+    }
+}
+
+function Show-ConfirmConsole {
+    param([string]$Text, [string]$Value)
+    $answer = ((Read-Host ("{0} (value: {1}) [y/N] / Confirmer ?" -f $Text, $Value)) | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    return ($answer -in @('y', 'yes', 'o', 'oui'))
 }
 
 try {
@@ -650,10 +1105,15 @@ try {
         Write-Host 'Choose what you want to do: / Choisissez :' -ForegroundColor White
         Write-Host '  1. Enable built-in Administrator and set a new password (you will enter it)'
         Write-Host '  2. Rename the currently signed-in local user account'
-        Write-Host '  3. Choose software to install from a numbered list'
-        Write-Host '  4. Printers (install / list / rename)'
-        Write-Host '  5. Users (list / rename / password / groups / enable-disable)'
+        Write-Host '  3. Choose software to install from a numbered list or a profile'
+        Write-Host '  4. Printers (install / list / rename / default / test page)'
+        Write-Host '  5. Users (list / rename / password / groups / enable-disable / create / delete)'
         Write-Host '  6. Run all options (1+2+3+4+5)'
+        Write-Host '  7. Preflight checks and system information'
+        Write-Host '  8. Create a System Restore point'
+        Write-Host '  9. Export an HTML report'
+        Write-Host ' 10. System status report (read-only)'
+        Write-Host ' 11. System maintenance (power, DNS, temp files, time zone)'
         Write-Host '  0. Exit / Quitter'
         Write-Host ''
         Write-Host 'You can choose more than one option, for example: 1,3'
@@ -669,10 +1129,10 @@ try {
             $actions = @('1', '2', '3', '4', '5')
         } else {
             $actions = @($mainChoice -split '[,;\s]+' | Select-Object -Unique)
-            $validActions = @('1', '2', '3', '4', '5')
+            $validActions = @('1', '2', '3', '4', '5', '7', '8', '9', '10', '11')
             $invalidActions = @($actions | Where-Object { $_ -notin $validActions })
             if ($invalidActions.Count -gt 0) {
-                Write-Host 'Invalid main-menu selection. Use 1, 2, 3, 4, 5, 6, or 0. Example: 1,3' -ForegroundColor Yellow
+                Write-Host 'Invalid main-menu selection. Use 1-11 or 0. Example: 1,3' -ForegroundColor Yellow
                 Read-Host 'Press Enter for main menu / Entree = menu principal'
                 continue
             }
@@ -683,6 +1143,11 @@ try {
         if ($actions -contains '3') { Invoke-InstallSoftware -Config $config }
         if ($actions -contains '4') { Show-PrinterMenu -Config $config }
         if ($actions -contains '5') { Show-UserMenu }
+        if ($actions -contains '7') { Show-SetupPreflight }
+        if ($actions -contains '8') { Invoke-CreateRestorePoint }
+        if ($actions -contains '9') { Invoke-ExportReport -Config $config }
+        if ($actions -contains '10') { Show-SystemReport }
+        if ($actions -contains '11') { Show-SystemMaintenance }
 
         Write-Host ''
         Write-Host '--------------------------------------------------------' -ForegroundColor Cyan
