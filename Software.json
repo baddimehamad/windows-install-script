@@ -4,6 +4,7 @@
       "Name": "Google Chrome",
       "Type": "winget",
       "Id": "Google.Chrome",
+      "VersionPicker": true,
       "Logo": "logo/chrome.png",
       "FallbackUrl": "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi",
       "Enabled": true
@@ -28,6 +29,7 @@
       "Name": "7-Zip",
       "Type": "winget",
       "Id": "7zip.7zip",
+      "VersionPicker": true,
       "Logo": "logo/7zip.png",
       "Enabled": true
     },
@@ -35,6 +37,7 @@
       "Name": "VLC media player",
       "Type": "winget",
       "Id": "VideoLAN.VLC",
+      "VersionPicker": true,
       "Logo": "logo/vlc.png",
       "Enabled": true
     },
@@ -42,6 +45,7 @@
       "Name": "Adobe Acrobat Reader",
       "Type": "winget",
       "Id": "Adobe.Acrobat.Reader.64-bit",
+      "VersionPicker": true,
       "Logo": "logo/acrobat-reader.png",
       "Enabled": true
     },
@@ -49,6 +53,7 @@
       "Name": "Notepad++",
       "Type": "winget",
       "Id": "Notepad++.Notepad++",
+      "VersionPicker": true,
       "Logo": "logo/notepad-plus-plus.png",
       "Enabled": true
     },
@@ -56,6 +61,7 @@
       "Name": "Visual Studio Code",
       "Type": "winget",
       "Id": "Microsoft.VisualStudioCode",
+      "VersionPicker": true,
       "Logo": "logo/visual-studio-code.png",
       "Enabled": true
     },
@@ -63,6 +69,7 @@
       "Name": "Git",
       "Type": "winget",
       "Id": "Git.Git",
+      "VersionPicker": true,
       "Logo": "logo/git.png",
       "Enabled": true
     },
@@ -70,6 +77,7 @@
       "Name": "Microsoft PowerToys",
       "Type": "winget",
       "Id": "Microsoft.PowerToys",
+      "VersionPicker": true,
       "Logo": "logo/powertoys.png",
       "Enabled": true
     },
@@ -77,6 +85,7 @@
       "Name": "Zoom Workplace",
       "Type": "winget",
       "Id": "Zoom.Zoom",
+      "VersionPicker": true,
       "Logo": "logo/zoom.png",
       "Enabled": true
     },
@@ -84,6 +93,7 @@
       "Name": "WhatsApp",
       "Type": "winget",
       "Id": "WhatsApp.WhatsApp",
+      "VersionPicker": true,
       "Logo": "logo/whatsapp.png",
       "Enabled": true
     },
@@ -91,6 +101,7 @@
       "Name": "LibreOffice",
       "Type": "winget",
       "Id": "TheDocumentFoundation.LibreOffice",
+      "VersionPicker": true,
       "Logo": "logo/libreoffice.png",
       "Enabled": true
     }

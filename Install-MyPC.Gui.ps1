@@ -142,8 +142,12 @@ $script:StringTable = @{
     'Software.ColType'          = @{ en = "Type"; fr = "Type" }
     'Software.ColStatus'        = @{ en = "Status"; fr = "Etat" }
     'Software.VersionLatest'    = @{ en = "Latest"; fr = "Derniere" }
-    'Software.VersionTooltip'   = @{ en = "Version used by 'Install selected'. 'Latest' follows the newest release published by winget. Use the check button to refresh the list."; fr = "Version utilisee par 'Installer la selection'. 'Derniere' suit la version la plus recente publiee par winget. Utilisez le bouton de verification pour actualiser la liste." }
+    'Software.VersionTooltip'   = @{ en = "Version used by 'Install selected'. 'Latest' follows the newest release published by winget. Use the refresh icon beside this list to reload it, or the check button for every application."; fr = "Version utilisee par 'Installer la selection'. 'Derniere' suit la version la plus recente publiee par winget. Utilisez l'icone d'actualisation a cote de cette liste pour la recharger, ou le bouton de verification pour toutes les applications." }
     'Software.VersionStale'     = @{ en = "The selected version {0} is no longer listed by winget; it is kept so the choice does not change silently."; fr = "La version selectionnee {0} n'est plus listee par winget ; elle est conservee pour que le choix ne change pas silencieusement." }
+    'Software.RefreshVersions'  = @{ en = "Refresh versions for this application"; fr = "Actualiser les versions de cette application" }
+    'Versions.Refreshing'       = @{ en = "Refreshing versions for {0} ..."; fr = "Actualisation des versions de {0} ..." }
+    'Versions.Refreshed'        = @{ en = "{0}: {1} version(s) loaded."; fr = "{0} : {1} version(s) chargee(s)." }
+    'Versions.RefreshFailed'    = @{ en = "Could not refresh versions for {0}; the existing list is kept."; fr = "Impossible d'actualiser les versions de {0} ; la liste existante est conservee." }
 
     'Status.Ready'              = @{ en = "Ready"; fr = "Pret" }
     'Status.Download'           = @{ en = "Will download"; fr = "Sera telecharge" }
@@ -406,7 +410,7 @@ $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="@@App.Title@@"
-        Height="760" Width="1120" MinHeight="540" MinWidth="1000"
+        Height="760" Width="1120" MinHeight="540" MinWidth="1030"
         WindowStartupLocation="CenterScreen"
         Background="#F4F6F8" FontFamily="Segoe UI" FontSize="13"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
@@ -944,6 +948,7 @@ $script:SoftwareInstalledCount = 0
 $script:SoftwareUpdateCount = 0
 $script:QueueAction = 'install'
 $script:CheckNotify = $true
+$script:VersionRefreshRow = $null
 $script:PrinterRows = @()
 $script:UserRows = @()
 $script:Queue = @()
@@ -1335,7 +1340,7 @@ function New-SoftwareRow {
     $container.BorderThickness = [System.Windows.Thickness]::new(0, 0, 0, 1)
     $container.Padding = [System.Windows.Thickness]::new(12, 9, 12, 9)
 
-    $grid = New-UiGrid -Columns @('32', '40', '*', '140', '120', '120', '70', '110')
+    $grid = New-UiGrid -Columns @('32', '40', '*', '140', '150', '120', '70', '110')
 
     $checkBox = [System.Windows.Controls.CheckBox]::new()
     $checkBox.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
@@ -1367,17 +1372,40 @@ function New-SoftwareRow {
 
     $hasVersionPicker = ($null -ne $Item.PSObject.Properties['VersionPicker']) -and [bool]$Item.VersionPicker
     $picker = $null
+    $refresh = $null
     if ($hasVersionPicker) {
+        # The picker and its recycle/refresh button share one column. The icon
+        # button reloads only this row's published versions in the background.
+        $pickerStack = [System.Windows.Controls.StackPanel]::new()
+        $pickerStack.Orientation = [System.Windows.Controls.Orientation]::Horizontal
+        $pickerStack.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+        $pickerStack.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Left
+
         $picker = [System.Windows.Controls.ComboBox]::new()
         $picker.Height = 26
+        $picker.Width = 112
         $picker.FontSize = 11.5
         $picker.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-        $picker.Margin = [System.Windows.Thickness]::new(0, 0, 8, 0)
+        $picker.Margin = [System.Windows.Thickness]::new(0, 0, 4, 0)
         $picker.ToolTip = Get-UiText 'Software.VersionTooltip'
         [void]$picker.Items.Add((Get-UiText 'Software.VersionLatest'))
         $picker.SelectedIndex = 0
-        [System.Windows.Controls.Grid]::SetColumn($picker, 4)
-        [void]$grid.Children.Add($picker)
+
+        $refresh = [System.Windows.Controls.Button]::new()
+        $refresh.Width = 26
+        $refresh.Height = 26
+        $refresh.Padding = [System.Windows.Thickness]::new(0)
+        $refresh.Content = [string][char]0xE72C
+        $refresh.FontFamily = [System.Windows.Media.FontFamily]::new('Segoe MDL2 Assets')
+        $refresh.FontSize = 12
+        $refresh.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+        $refresh.ToolTip = Get-UiText 'Software.RefreshVersions'
+        $refresh.Style = $script:Window.Resources['SecondaryButton']
+
+        [void]$pickerStack.Children.Add($picker)
+        [void]$pickerStack.Children.Add($refresh)
+        [System.Windows.Controls.Grid]::SetColumn($pickerStack, 4)
+        [void]$grid.Children.Add($pickerStack)
     }
 
     $update = New-UiText -Text '' -Size 11.5 -Color '#5F6B76'
@@ -1423,6 +1451,7 @@ function New-SoftwareRow {
         CheckBox        = $checkBox
         Version         = $version
         Picker          = $picker
+        Refresh         = $refresh
         SelectedVersion = ''
         Update          = $update
         Status          = $status
@@ -1447,6 +1476,17 @@ function New-SoftwareRow {
             $selected = ''
             if ($sender.SelectedIndex -gt 0) { $selected = [string]$sender.SelectedItem }
             $owner.SelectedVersion = $selected
+        })
+    }
+
+    if ($null -ne $refresh) {
+        # Same Tag pattern as the picker: the handler only needs the row.
+        $refresh.Tag = $row
+        $refresh.Add_Click({
+            param($sender, $e)
+            $owner = $sender.Tag
+            if ($null -eq $owner) { return }
+            Start-SoftwareVersionRefresh -Row $owner
         })
     }
 
@@ -1502,6 +1542,51 @@ function Update-SoftwareVersionPicker {
     if ($stale) {
         Add-LogLine -Level Warning -Message ((Get-UiText 'Software.VersionStale') -f $current)
     }
+}
+
+function Start-SoftwareVersionRefresh {
+    <#
+    .SYNOPSIS
+        Reloads one row's published version list in the background.
+    .DESCRIPTION
+        The recycle icon next to a row's dropdown only refreshes that
+        application. Install selected keeps using the chosen version and
+        Update selected still follows the latest release.
+    #>
+    param($Row)
+
+    if ($script:Busy -or $null -eq $Row -or $null -eq $Row.Picker) { return }
+
+    $id = ''
+    if ($null -ne $Row.Item.PSObject.Properties['Id']) { $id = [string]$Row.Item.Id }
+    if ([string]::IsNullOrWhiteSpace($id)) { return }
+
+    $script:VersionRefreshRow = $Row
+    Start-SetupTask -Label ((Get-UiText 'Versions.Refreshing') -f $Row.Name) `
+        -Command 'Get-SetupWingetVersions' -Parameters @{ Id = $id } `
+        -OnComplete 'Complete-SoftwareVersionRefresh'
+}
+
+function Complete-SoftwareVersionRefresh {
+    $row = $script:VersionRefreshRow
+    $script:VersionRefreshRow = $null
+    if ($null -eq $row) { return }
+
+    # The background task flattens its output, so a version list arrives as
+    # plain strings rather than a result object.
+    $versions = @()
+    foreach ($entry in @($script:LastResults)) {
+        $text = [string]$entry
+        if ($text -match '^\d+(?:\.\d+)+$') { $versions += $text }
+    }
+
+    if ($versions.Count -eq 0) {
+        Add-LogLine -Level Warning -Message ((Get-UiText 'Versions.RefreshFailed') -f $row.Name)
+        return
+    }
+
+    Update-SoftwareVersionPicker -Row $row -Versions $versions
+    Add-LogLine -Level Info -Message ((Get-UiText 'Versions.Refreshed') -f $row.Name, $versions.Count)
 }
 
 function Get-SoftwareInstallItem {
@@ -1602,6 +1687,7 @@ function Update-SoftwareActions {
     $script:SoftwareCheckButton.IsEnabled = -not $script:Busy
     foreach ($row in $script:SoftwareRows) {
         if ($null -ne $row.Picker) { $row.Picker.IsEnabled = -not $script:Busy }
+        if ($null -ne $row.Refresh) { $row.Refresh.IsEnabled = -not $script:Busy }
     }
 
     if ($script:SoftwareChecked) {

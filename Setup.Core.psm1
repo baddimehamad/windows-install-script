@@ -864,12 +864,14 @@ function Get-SetupWingetVersions {
         per package is enough.
     #>
     param(
-        [Parameter(Mandatory = $true)]$Winget,
+        $Winget = $null,
         [string]$Id,
         [hashtable]$Cache = $null
     )
 
     if ([string]::IsNullOrWhiteSpace($Id)) { return @() }
+    if ($null -eq $Winget) { $Winget = Get-WingetCommand }
+    if ($null -eq $Winget) { return @() }
     if ($null -ne $Cache -and $Cache.ContainsKey($Id)) { return @($Cache[$Id]) }
 
     $versions = @()
