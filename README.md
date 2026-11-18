@@ -38,7 +38,7 @@ The window has five tabs:
 
 | Tab | What you can do |
 |-----|-----------------|
-| **Software** | Filter the list, tick applications, then **Install selected**. **Check versions and updates** fills the *Installed version* and *Available update* columns from Windows and Winget, and refreshes the *Install version* dropdown on every unpinned Winget entry; each dropdown also has a small recycle icon that reloads just that application's versions. The update column shows `Up to date`, `Pinned`, `Manual`, `Unknown` or the newer version. Select installed apps to **Update selected** (Winget only) or **Uninstall selected** (after a confirmation). Each row shows the application logo, the `WINGET`/`LOCAL` badge and a status such as `Ready`, `Not installed`, `Installed`, `Update available`, `Installing...`, `Installed (restart)`, `Skipped`, `Updated`, `Uninstalled` or `Failed`. |
+| **Software** | Filter the list, tick applications, then **Install selected**. **Check versions and updates** fills the *Installed version* and *Available update* columns from Windows and Winget, and refreshes the *Install version* dropdown on every unpinned Winget-source entry; each dropdown also has a small recycle icon that reloads just that application's versions. The update column shows `Up to date`, `Pinned`, `Manual`, `Unknown` or the newer version. Select installed apps to **Update selected** (Winget only) or **Uninstall selected** (after a confirmation). Each row shows the application logo, the `WINGET`/`LOCAL` badge and a status such as `Ready`, `Not installed`, `Installed`, `Update available`, `Installing...`, `Installed (restart)`, `Skipped`, `Updated`, `Uninstalled` or `Failed`. |
 | **Printers** | Pick a manufacturer, type the IP/hostname, port and optional name, then **Install printer**. The right-hand list shows installed printers and lets you rename one. |
 | **Users** | Rename a local account, change its password, or add/remove group membership. The only enabled administrator is marked `LAST ADMIN - LOCKED` and cannot be changed. |
 | **Account** | Enable the built-in Administrator (password typed twice, never stored), or rename the account you are signed in with. |
@@ -52,7 +52,7 @@ Notes:
 - **The window never freezes.** Installs, updates and uninstalls run in a background runspace; a **Cancel** button appears in the status bar while something is running.
 - **Logs:** `Logs\gui-YYYYMMDD-HHMMSS.log`, one per window session.
 - **Logos:** each software row shows the image named by its `Logo` field in `Software.json` (for example `logo/chrome.png`). The files live in the `logo` folder. If an image is missing or unreadable, the row shows a colored tile with the application's first letter instead, so a bad logo never blocks an install.
-- **Installed checker (window only).** **Check versions and updates** reads the 32-bit, 64-bit and per-user Add/Remove Programs entries and, for `WINGET` rows, the package list reported by Winget. The *Installed version* column shows the registry version when one exists. An update is offered only when Winget recognises the catalog ID in its `winget` source, so the window never proposes an update it cannot perform. Applications Winget does not manage, such as Chrome installed from its MSI, are compared with the version published by the Winget source and show `Up to date` when they match; when the source has a newer version, the window updates the app by reinstalling that version. Unrecognised Winget IDs show `Unknown`, pinned entries show `Pinned`, and local installers show `Manual`. The same check refreshes the *Install version* dropdown on every unpinned Winget entry: choose `Latest` or an exact release before **Install selected**. Because it queries each application separately, the full check takes longer as the catalog grows; the recycle icon next to a dropdown reloads only that application. **Uninstall selected** uses `winget uninstall` when Winget manages the package and falls back to the registered uninstaller otherwise. A check runs automatically after every install, update or uninstall.
+- **Installed checker (window only).** **Check versions and updates** reads the 32-bit, 64-bit and per-user Add/Remove Programs entries and, for `WINGET` rows, the package list reported by Winget. The *Installed version* column shows the registry version when one exists. An update is offered only when Winget recognises the catalog ID in its `winget` source, so the window never proposes an update it cannot perform. Applications Winget does not manage, such as Chrome installed from its MSI, are compared with the version published by the Winget source and show `Up to date` when they match; when the source has a newer version, the window updates the app by reinstalling that version. Unrecognised Winget IDs show `Unknown`, pinned entries show `Pinned`, and local installers show `Manual`. The same check refreshes the *Install version* dropdown on every unpinned Winget-source entry: choose `Latest` or an exact release before **Install selected**. Because it queries each application separately, the full check takes longer as the catalog grows; the recycle icon next to a dropdown reloads only that application. **Uninstall selected** uses `winget uninstall` when Winget manages the package and falls back to the registered uninstaller otherwise. A check runs automatically after every install, update or uninstall.
 - The GUI does **not** write `Software.json` — it is read-only. Edit the file by hand to change the catalog.
 - Closing the window during a task asks for confirmation; a child installer (winget, msiexec) may keep running in the background.
 
@@ -252,9 +252,29 @@ Add `Version` to a Winget entry to pin it:
 - The window shows `Pinned` in the *Available update* column and never includes that entry in **Update selected**. Remove `Version` to follow the latest release again.
 - Direct-download fallbacks are skipped for pinned entries because they install the vendor's latest build.
 
+### Install a Microsoft Store app
+
+Add `"Source": "msstore"` to a Winget entry and use the Store product ID:
+
+```json
+{
+  "Name": "Windows Scan",
+  "Type": "winget",
+  "Source": "msstore",
+  "Id": "9WZDNCRFJ3PV",
+  "Logo": "logo/windows-scan.png",
+  "Enabled": true
+}
+```
+
+- Find the product ID with `winget search --source msstore <name>`.
+- Installs use `winget install --source msstore`, and the row shows `Store ID` instead of `Winget ID`.
+- The Microsoft Store does not publish a usable version list, so these entries never get an *Install version* dropdown. A `Version` pin is ignored for this source.
+- The Store keeps its apps up to date itself, so the window detects the app as installed but does not offer it in **Update selected**.
+
 ### Choose the version to install (window)
 
-Every unpinned Winget entry ships with `"VersionPicker": true`, so each row has an *Install version* dropdown:
+Every unpinned entry from the `winget` source ships with `"VersionPicker": true`, so each row has an *Install version* dropdown:
 
 ```json
 {

@@ -40,8 +40,11 @@ blocks an install.
 
 ## Sources
 
-Most files come from Wikimedia Commons. Two come from the vendors' public
-repositories because Commons did not host a suitable square icon.
+Most files come from Wikimedia Commons. Several come from the vendors'
+public repositories because Commons did not host a suitable square icon.
+The Windows Scan glyph comes from the Microsoft Store listing and was
+placed on a blue tile so the white artwork stays visible on the window's
+white rows.
 
 | File | Source |
 |------|--------|
@@ -58,6 +61,9 @@ repositories because Commons did not host a suitable square icon.
 | `whatsapp.png` | [WhatsApp Logo green](https://commons.wikimedia.org/wiki/File:WhatsApp_Logo_green.svg) |
 | `libreoffice.png` | [LibreOffice/core main.png](https://github.com/LibreOffice/core/blob/master/sysui/desktop/icons/hicolor/256x256/apps/main.png) |
 | `microsoft-office.png` | [Microsoft 365 (2022)](https://commons.wikimedia.org/wiki/File:Microsoft_365_(2022).svg) |
+| `winrar.png` | [WinRAR icon](https://commons.wikimedia.org/wiki/File:WinRAR_icon.svg) |
+| `naps2.png` | [cyanfish/naps2 favicon.ico](https://github.com/cyanfish/naps2/blob/master/NAPS2.Lib/Icons/favicon.ico) |
+| `windows-scan.png` | [Windows Scan Store listing](https://apps.microsoft.com/detail/9wzdncrfj3pv); white glyph placed on a blue tile for contrast |
 
 ## Trademarks
 

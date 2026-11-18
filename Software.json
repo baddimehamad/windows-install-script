@@ -104,6 +104,30 @@
       "VersionPicker": true,
       "Logo": "logo/libreoffice.png",
       "Enabled": true
+    },
+    {
+      "Name": "WinRAR",
+      "Type": "winget",
+      "Id": "RARLab.WinRAR",
+      "VersionPicker": true,
+      "Logo": "logo/winrar.png",
+      "Enabled": true
+    },
+    {
+      "Name": "NAPS2",
+      "Type": "winget",
+      "Id": "Cyanfish.NAPS2",
+      "VersionPicker": true,
+      "Logo": "logo/naps2.png",
+      "Enabled": true
+    },
+    {
+      "Name": "Windows Scan",
+      "Type": "winget",
+      "Source": "msstore",
+      "Id": "9WZDNCRFJ3PV",
+      "Logo": "logo/windows-scan.png",
+      "Enabled": true
     }
   ],
   "LocalInstallers": [

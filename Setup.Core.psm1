@@ -70,14 +70,33 @@ function Get-SetupCatalogEntry {
         Returns the Software.json entry behind a catalog display item.
     .DESCRIPTION
         Get-SoftwareCatalog wraps each entry for the front-ends. Actions that
-        need the configured fields (Id, Path, Url, Version, FallbackUrl) accept
-        both shapes so a caller can pass either one.
+        need the configured fields (Id, Source, Path, Url, Version, FallbackUrl)
+        accept both shapes so a caller can pass either one.
     #>
     param($Item)
     if ($null -eq $Item) { return $null }
     $property = $Item.PSObject.Properties['Item']
     if ($null -ne $property -and $null -ne $property.Value) { return $property.Value }
     return $Item
+}
+
+function Get-SetupCatalogSource {
+    <#
+    .SYNOPSIS
+        Returns the winget source configured for a catalog entry.
+    .DESCRIPTION
+        "winget" is the default. An entry that sets Source to "msstore" is
+        installed and updated from the Microsoft Store source. Version lists
+        are only available for the winget source.
+    #>
+    param($Item)
+    $source = 'winget'
+    if ($null -eq $Item) { return $source }
+    $property = $Item.PSObject.Properties['Source']
+    if ($null -eq $property) { return $source }
+    $candidate = ([string]$property.Value).Trim().ToLowerInvariant()
+    if ($candidate -eq 'msstore') { $source = 'msstore' }
+    return $source
 }
 
 function New-SetupResult {
@@ -138,13 +157,17 @@ function Get-SoftwareCatalog {
         if ($null -eq $app -or $app.Enabled -eq $false) { continue }
         if ([string]$app.Type -ne 'winget' -or [string]::IsNullOrWhiteSpace([string]$app.Id)) { continue }
         $hasFallback = ($null -ne $app.FallbackUrl) -and (-not [string]::IsNullOrWhiteSpace([string]$app.FallbackUrl))
+        $source = Get-SetupCatalogSource -Item $app
         $pinnedVersion = [string]$app.Version
         $pinned = -not [string]::IsNullOrWhiteSpace($pinnedVersion)
         # A pinned entry already fixes the version; the two options cannot be
-        # combined, so the picker is only offered for unpinned entries.
+        # combined, so the picker is only offered for unpinned entries. The
+        # Microsoft Store source does not publish a usable version list either.
         $versionPicker = ($null -ne $app.PSObject.Properties['VersionPicker']) -and [bool]$app.VersionPicker
-        if ($pinned) { $versionPicker = $false }
-        $detail = ("Winget ID: {0}" -f [string]$app.Id)
+        if ($pinned -or $source -ne 'winget') { $versionPicker = $false }
+        $idLabel = 'Winget ID'
+        if ($source -eq 'msstore') { $idLabel = 'Store ID' }
+        $detail = ("{0}: {1}" -f $idLabel, [string]$app.Id)
         if ($pinned) { $detail = $detail + (" | pinned version {0}" -f $pinnedVersion) }
         if ($hasFallback) { $detail = $detail + ' [+direct-download fallback]' }
         [void]$items.Add([pscustomobject]@{
@@ -152,6 +175,7 @@ function Get-SoftwareCatalog {
             Name          = [string]$app.Name
             Detail        = $detail
             Id            = [string]$app.Id
+            Source        = $source
             Version       = $pinnedVersion
             Pinned        = $pinned
             VersionPicker = $versionPicker
@@ -374,6 +398,7 @@ function Install-SetupWingetApp {
     $displayName = [string]$App.Name
     $App = Get-SetupCatalogEntry -Item $App
     if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = [string]$App.Name }
+    $source = Get-SetupCatalogSource -Item $App
     $pinnedVersion = [string]$App.Version
     $pinned = -not [string]::IsNullOrWhiteSpace($pinnedVersion)
     $name = [string]$App.Name
@@ -401,15 +426,17 @@ function Install-SetupWingetApp {
     # Keep the buffered capture: hash-mismatch detection needs the full text,
     # and the wording differs between English and French Windows.
     $wingetArgs = @(
-        'install', '--id', [string]$App.Id, '--exact', '--source', 'winget',
+        'install', '--id', [string]$App.Id, '--exact', '--source', $source,
         '--silent', '--accept-package-agreements', '--accept-source-agreements',
         '--disable-interactivity'
     )
-    if ($pinned) {
+    if ($pinned -and $source -eq 'winget') {
         # --force makes winget apply the pin even when another version is
         # already installed. Without it, winget refuses to change the version.
         $wingetArgs += @('--version', $pinnedVersion, '--force')
         Write-SetupLog -Level Info -Message ("Pinned version requested: {0}" -f $pinnedVersion)
+    } elseif ($pinned) {
+        Write-SetupLog -Level Warning -Message ("Version pinning is not supported for the {0} source; installing the current version." -f $source)
     }
     $wingetOut = & $winget.Source @wingetArgs 2>&1 | Out-String
     if (-not [string]::IsNullOrWhiteSpace($wingetOut)) {
@@ -938,6 +965,7 @@ function Get-SetupInstalledSoftware {
     $versionPickerCache = @{}
 
     foreach ($item in $catalog) {
+        $itemSource = Get-SetupCatalogSource -Item $item
         $registryEntry = $null
         if ($registryEntries.Count -gt 0) {
             $registryEntry = Find-SetupRegistryEntry -Entries $registryEntries -Item $item
@@ -960,6 +988,7 @@ function Get-SetupInstalledSoftware {
         if ($null -ne $item.PSObject.Properties['Version']) { $pinnedVersion = [string]$item.Version }
 
         $versionPicker = ($null -ne $item.PSObject.Properties['VersionPicker']) -and [bool]$item.VersionPicker
+        if ($itemSource -ne 'winget') { $versionPicker = $false }
         $versions = @()
         if ($versionPicker) {
             if ($null -ne $winget) {
@@ -983,10 +1012,10 @@ function Get-SetupInstalledSoftware {
             $available = [string]$wingetRow.Available
             $updateSource = [string]$wingetRow.Source
             # "winget list" also reports Microsoft Store packages. Updates are
-            # only offered for the winget source because the update command is
-            # pinned to it.
+            # only offered for the winget source because the Microsoft Store
+            # keeps those applications up to date itself.
             $updateKnown = ($updateSource -eq 'winget')
-        } elseif ($item.Kind -eq 'winget' -and $null -ne $registryEntry -and $null -ne $winget) {
+        } elseif ($itemSource -eq 'winget' -and $null -ne $registryEntry -and $null -ne $winget) {
             # Installed, but winget does not manage this installation: Chrome
             # from its MSI shows up as an ARP entry. Compare the installed
             # version with the version published by the winget source instead
@@ -1173,6 +1202,7 @@ function Update-SetupSoftware {
     if ([string]::IsNullOrWhiteSpace($name)) { $name = 'Software' }
     $id = [string]$CatalogItem.Id
     if ([string]::IsNullOrWhiteSpace($id)) { $id = [string]$entry.Id }
+    $source = Get-SetupCatalogSource -Item $entry
 
     $pinnedVersion = ''
     if ($null -ne $entry.PSObject.Properties['Version']) { $pinnedVersion = ([string]$entry.Version).Trim() }
@@ -1194,14 +1224,14 @@ function Update-SetupSoftware {
 
     Write-SetupLog -Level Task -Message ("Updating {0} ({1})" -f $name, $id)
     $wingetArgs = @(
-        'upgrade', '--id', $id, '--exact', '--source', 'winget',
+        'upgrade', '--id', $id, '--exact', '--source', $source,
         '--silent', '--accept-package-agreements', '--accept-source-agreements',
         '--disable-interactivity'
     )
     if ($Method -eq 'install') {
         Write-SetupLog -Level Info -Message 'Winget does not manage this installation; reinstalling the latest version from its source.'
         $wingetArgs = @(
-            'install', '--id', $id, '--exact', '--source', 'winget',
+            'install', '--id', $id, '--exact', '--source', $source,
             '--silent', '--force', '--accept-package-agreements', '--accept-source-agreements',
             '--disable-interactivity'
         )
