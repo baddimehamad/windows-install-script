@@ -140,6 +140,10 @@ function Get-SoftwareCatalog {
         $hasFallback = ($null -ne $app.FallbackUrl) -and (-not [string]::IsNullOrWhiteSpace([string]$app.FallbackUrl))
         $pinnedVersion = [string]$app.Version
         $pinned = -not [string]::IsNullOrWhiteSpace($pinnedVersion)
+        # A pinned entry already fixes the version; the two options cannot be
+        # combined, so the picker is only offered for unpinned entries.
+        $versionPicker = ($null -ne $app.PSObject.Properties['VersionPicker']) -and [bool]$app.VersionPicker
+        if ($pinned) { $versionPicker = $false }
         $detail = ("Winget ID: {0}" -f [string]$app.Id)
         if ($pinned) { $detail = $detail + (" | pinned version {0}" -f $pinnedVersion) }
         if ($hasFallback) { $detail = $detail + ' [+direct-download fallback]' }
@@ -150,6 +154,7 @@ function Get-SoftwareCatalog {
             Id            = [string]$app.Id
             Version       = $pinnedVersion
             Pinned        = $pinned
+            VersionPicker = $versionPicker
             Exists        = $true
             WillDownload  = $false
             Item          = $app
@@ -848,6 +853,46 @@ function Get-SetupWingetLatestVersion {
     return $version
 }
 
+function Get-SetupWingetVersions {
+    <#
+    .SYNOPSIS
+        Returns the versions published by the winget source, newest first.
+    .DESCRIPTION
+        "winget show --versions" prints a localized table. Only the dotted
+        numeric version column is kept, so headers and separators in any
+        language are ignored. Results are cached per check because one call
+        per package is enough.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$Winget,
+        [string]$Id,
+        [hashtable]$Cache = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Id)) { return @() }
+    if ($null -ne $Cache -and $Cache.ContainsKey($Id)) { return @($Cache[$Id]) }
+
+    $versions = @()
+    try {
+        $output = & $Winget.Source show --id $Id --exact --source winget --versions `
+            --accept-source-agreements --disable-interactivity 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0) {
+            $seen = @{}
+            foreach ($line in ($output -split '\r?\n')) {
+                $text = $line.Trim()
+                if ($text -notmatch '^\d+(?:\.\d+)+$') { continue }
+                if ($seen.ContainsKey($text)) { continue }
+                $seen[$text] = $true
+                $versions += $text
+            }
+        }
+    } catch {
+        $versions = @()
+    }
+    if ($null -ne $Cache) { $Cache[$Id] = $versions }
+    return $versions
+}
+
 function Get-SetupInstalledSoftware {
     <#
     .SYNOPSIS
@@ -888,6 +933,7 @@ function Get-SetupInstalledSoftware {
     $installedCount = 0
     $updateCount = 0
     $latestVersionCache = @{}
+    $versionPickerCache = @{}
 
     foreach ($item in $catalog) {
         $registryEntry = $null
@@ -910,6 +956,19 @@ function Get-SetupInstalledSoftware {
         $pinned = ($null -ne $item.PSObject.Properties['Pinned']) -and [bool]$item.Pinned
         $pinnedVersion = ''
         if ($null -ne $item.PSObject.Properties['Version']) { $pinnedVersion = [string]$item.Version }
+
+        $versionPicker = ($null -ne $item.PSObject.Properties['VersionPicker']) -and [bool]$item.VersionPicker
+        $versions = @()
+        if ($versionPicker) {
+            if ($null -ne $winget) {
+                $versions = @(Get-SetupWingetVersions -Winget $winget -Id ([string]$item.Id) -Cache $versionPickerCache)
+            }
+            if ($versions.Count -gt 0) {
+                Write-SetupLog -Level Detail -Message ("{0}: {1} version(s) available online." -f [string]$item.Name, $versions.Count)
+            } else {
+                Write-SetupLog -Level Warning -Message ("Could not read the list of available versions for {0}." -f [string]$item.Name)
+            }
+        }
 
         $available = ''
         $updateKnown = $false
@@ -977,6 +1036,8 @@ function Get-SetupInstalledSoftware {
             UpdateMethod    = $updateMethod
             Pinned          = $pinned
             PinnedVersion   = $pinnedVersion
+            VersionPicker   = $versionPicker
+            Versions        = $versions
             WingetManaged   = $wingetManaged
             Uninstallable   = $uninstallable
             Source          = $source
@@ -1994,6 +2055,7 @@ Export-ModuleMember -Function @(
     'Repair-SetupWingetSource',
     'Install-SetupWingetApp',
     'Install-SetupLocalPackage',
+    'Get-SetupWingetVersions',
     'Get-SetupInstalledSoftware',
     'Uninstall-SetupSoftware',
     'Update-SetupSoftware',

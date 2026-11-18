@@ -129,7 +129,7 @@ $script:StringTable = @{
     'Software.Install'          = @{ en = "Install selected"; fr = "Installer la selection" }
     'Software.InstallCount'     = @{ en = "Install selected ({0})"; fr = "Installer la selection ({0})" }
     'Software.Summary'          = @{ en = "{0} application(s) available, {1} selected."; fr = "{0} application(s) disponible(s), {1} selectionnee(s)." }
-    'Software.Check'            = @{ en = "Check installed"; fr = "Verifier l'installation" }
+    'Software.Check'            = @{ en = "Check versions and updates"; fr = "Verifier versions et mises a jour" }
     'Software.Update'           = @{ en = "Update selected"; fr = "Mettre a jour la selection" }
     'Software.UpdateCount'      = @{ en = "Update selected ({0})"; fr = "Mettre a jour la selection ({0})" }
     'Software.Uninstall'        = @{ en = "Uninstall selected"; fr = "Desinstaller la selection" }
@@ -137,9 +137,13 @@ $script:StringTable = @{
     'Software.CheckSummary'     = @{ en = "{0} application(s), {1} selected - {2} installed, {3} update(s) available."; fr = "{0} application(s), {1} selectionnee(s) - {2} installee(s), {3} mise(s) a jour disponible(s)." }
     'Software.ColApplication'   = @{ en = "Application"; fr = "Application" }
     'Software.ColVersion'       = @{ en = "Installed version"; fr = "Version installee" }
+    'Software.ColInstallVersion' = @{ en = "Install version"; fr = "Version a installer" }
     'Software.ColUpdate'        = @{ en = "Available update"; fr = "Mise a jour" }
     'Software.ColType'          = @{ en = "Type"; fr = "Type" }
     'Software.ColStatus'        = @{ en = "Status"; fr = "Etat" }
+    'Software.VersionLatest'    = @{ en = "Latest"; fr = "Derniere" }
+    'Software.VersionTooltip'   = @{ en = "Version used by 'Install selected'. 'Latest' follows the newest release published by winget. Use the check button to refresh the list."; fr = "Version utilisee par 'Installer la selection'. 'Derniere' suit la version la plus recente publiee par winget. Utilisez le bouton de verification pour actualiser la liste." }
+    'Software.VersionStale'     = @{ en = "The selected version {0} is no longer listed by winget; it is kept so the choice does not change silently."; fr = "La version selectionnee {0} n'est plus listee par winget ; elle est conservee pour que le choix ne change pas silencieusement." }
 
     'Status.Ready'              = @{ en = "Ready"; fr = "Pret" }
     'Status.Download'           = @{ en = "Will download"; fr = "Sera telecharge" }
@@ -274,6 +278,7 @@ $script:StringTable = @{
     'Install.Summary'           = @{ en = "Installation finished.{0}{0}Installed: {1}{0}Skipped: {2}"; fr = "Installation terminee.{0}{0}Installes : {1}{0}Ignores : {2}" }
     'Install.Started'           = @{ en = "Software installation started: {0} item(s)."; fr = "Installation demarree : {0} element(s)." }
     'Install.Step'              = @{ en = "Installing {0} ({1}/{2})"; fr = "Installation de {0} ({1}/{2})" }
+    'Install.Version'           = @{ en = "Requested version for {0}: {1}"; fr = "Version demandee pour {0} : {1}" }
     'Install.QueueStep'         = @{ en = "[{0}/{1}] {2}"; fr = "[{0}/{1}] {2}" }
     'Install.FinishedLog'       = @{ en = "Software installation finished: {0} installed, {1} failed, {2} skipped."; fr = "Installation terminee : {0} installes, {1} en echec, {2} ignores." }
     'Install.CancelledRest'     = @{ en = "The remaining items were not installed because the task was cancelled."; fr = "Les elements restants n'ont pas ete installes (tache annulee)." }
@@ -281,7 +286,7 @@ $script:StringTable = @{
     'Install.WingetHint'        = @{ en = "Install Microsoft App Installer from https://aka.ms/getwinget and try again."; fr = "Installez Microsoft App Installer depuis https://aka.ms/getwinget puis reessayez." }
     'Install.CheckingWinget'    = @{ en = "Checking Winget sources..."; fr = "Verification des sources Winget..." }
 
-    'Check.Running'             = @{ en = "Checking installed software and updates..."; fr = "Verification des logiciels installes et des mises a jour..." }
+    'Check.Running'             = @{ en = "Checking installed software, available versions and updates..."; fr = "Verification des logiciels installes, des versions disponibles et des mises a jour..." }
     'Check.FinishedTitle'       = @{ en = "Check finished"; fr = "Verification terminee" }
     'Check.Finished'            = @{ en = "{0} installed application(s), {1} update(s) available."; fr = "{0} application(s) installee(s), {1} mise(s) a jour disponible(s)." }
     'Check.FailedTitle'         = @{ en = "Check failed"; fr = "Echec de la verification" }
@@ -401,7 +406,7 @@ $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="@@App.Title@@"
-        Height="760" Width="1120" MinHeight="540" MinWidth="880"
+        Height="760" Width="1120" MinHeight="540" MinWidth="1000"
         WindowStartupLocation="CenterScreen"
         Background="#F4F6F8" FontFamily="Segoe UI" FontSize="13"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
@@ -663,14 +668,16 @@ $xaml = @'
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="140"/>
                     <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="120"/>
                     <ColumnDefinition Width="70"/>
                     <ColumnDefinition Width="110"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="2" Text="@@Software.ColApplication@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
                   <TextBlock Grid.Column="3" Text="@@Software.ColVersion@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
-                  <TextBlock Grid.Column="4" Text="@@Software.ColUpdate@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
-                  <TextBlock Grid.Column="5" Text="@@Software.ColType@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
-                  <TextBlock Grid.Column="6" Text="@@Software.ColStatus@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                  <TextBlock Grid.Column="4" Text="@@Software.ColInstallVersion@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="5" Text="@@Software.ColUpdate@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="6" Text="@@Software.ColType@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="7" Text="@@Software.ColStatus@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                 </Grid>
               </Border>
               <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -1328,7 +1335,7 @@ function New-SoftwareRow {
     $container.BorderThickness = [System.Windows.Thickness]::new(0, 0, 0, 1)
     $container.Padding = [System.Windows.Thickness]::new(12, 9, 12, 9)
 
-    $grid = New-UiGrid -Columns @('32', '40', '*', '140', '120', '70', '110')
+    $grid = New-UiGrid -Columns @('32', '40', '*', '140', '120', '120', '70', '110')
 
     $checkBox = [System.Windows.Controls.CheckBox]::new()
     $checkBox.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
@@ -1358,10 +1365,25 @@ function New-SoftwareRow {
     [System.Windows.Controls.Grid]::SetColumn($version, 3)
     [void]$grid.Children.Add($version)
 
+    $hasVersionPicker = ($null -ne $Item.PSObject.Properties['VersionPicker']) -and [bool]$Item.VersionPicker
+    $picker = $null
+    if ($hasVersionPicker) {
+        $picker = [System.Windows.Controls.ComboBox]::new()
+        $picker.Height = 26
+        $picker.FontSize = 11.5
+        $picker.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+        $picker.Margin = [System.Windows.Thickness]::new(0, 0, 8, 0)
+        $picker.ToolTip = Get-UiText 'Software.VersionTooltip'
+        [void]$picker.Items.Add((Get-UiText 'Software.VersionLatest'))
+        $picker.SelectedIndex = 0
+        [System.Windows.Controls.Grid]::SetColumn($picker, 4)
+        [void]$grid.Children.Add($picker)
+    }
+
     $update = New-UiText -Text '' -Size 11.5 -Color '#5F6B76'
     $update.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
     $update.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
-    [System.Windows.Controls.Grid]::SetColumn($update, 4)
+    [System.Windows.Controls.Grid]::SetColumn($update, 5)
     [void]$grid.Children.Add($update)
 
     $badge = [System.Windows.Controls.Border]::new()
@@ -1377,13 +1399,13 @@ function New-SoftwareRow {
         $badgeText = New-UiText -Text 'LOCAL' -Size 10 -Weight SemiBold -Color '#4B3A82'
     }
     $badge.Child = $badgeText
-    [System.Windows.Controls.Grid]::SetColumn($badge, 5)
+    [System.Windows.Controls.Grid]::SetColumn($badge, 6)
     [void]$grid.Children.Add($badge)
 
     $status = New-UiText -Text $StatusText -Size 11.5 -Color '#5F6B76'
     $status.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Right
     $status.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
-    [System.Windows.Controls.Grid]::SetColumn($status, 6)
+    [System.Windows.Controls.Grid]::SetColumn($status, 7)
     [void]$grid.Children.Add($status)
 
     $container.Child = $grid
@@ -1392,7 +1414,7 @@ function New-SoftwareRow {
     $checkBox.Add_Checked({ Update-SoftwareActions })
     $checkBox.Add_Unchecked({ Update-SoftwareActions })
 
-    return [pscustomobject]@{
+    $row = [pscustomobject]@{
         Kind            = $Item.Kind
         Name            = $Item.Name
         Detail          = $Item.Detail
@@ -1400,6 +1422,8 @@ function New-SoftwareRow {
         Container       = $container
         CheckBox        = $checkBox
         Version         = $version
+        Picker          = $picker
+        SelectedVersion = ''
         Update          = $update
         Status          = $status
         Installed       = $false
@@ -1410,6 +1434,101 @@ function New-SoftwareRow {
         Uninstallable   = $false
         WingetManaged   = $false
     }
+
+    if ($null -ne $picker) {
+        # Index 0 is "Latest"; any other index is an exact published version.
+        # The row is stored on the control so the handler never depends on a
+        # captured function scope, which PowerShell event handlers do not keep.
+        $picker.Tag = $row
+        $picker.Add_SelectionChanged({
+            param($sender, $e)
+            $owner = $sender.Tag
+            if ($null -eq $owner) { return }
+            $selected = ''
+            if ($sender.SelectedIndex -gt 0) { $selected = [string]$sender.SelectedItem }
+            $owner.SelectedVersion = $selected
+        })
+    }
+
+    return $row
+}
+
+function Update-SoftwareVersionPicker {
+    <#
+    .SYNOPSIS
+        Replaces a row's version list with the versions published by winget.
+    .DESCRIPTION
+        The current choice is preserved. An empty result leaves the existing
+        items alone, and a version that disappeared from the source stays
+        selected instead of silently moving to another release.
+    #>
+    param($Row, [object[]]$Versions)
+
+    if ($null -eq $Row -or $null -eq $Row.Picker) { return }
+
+    $latestText = Get-UiText 'Software.VersionLatest'
+    $current = [string]$Row.SelectedVersion
+    $entries = @($latestText)
+    foreach ($version in @($Versions)) {
+        $text = [string]$version
+        if ([string]::IsNullOrWhiteSpace($text)) { continue }
+        if ($entries -contains $text) { continue }
+        $entries += $text
+    }
+
+    # No online result: keep whatever the dropdown already shows.
+    if ($entries.Count -le 1) { return }
+
+    $stale = $false
+    if (-not [string]::IsNullOrWhiteSpace($current) -and ($entries -notcontains $current)) {
+        $entries += $current
+        $stale = $true
+    }
+
+    $existing = @($Row.Picker.Items | ForEach-Object { [string]$_ })
+    if (($existing -join "`n") -ne ($entries -join "`n")) {
+        $Row.Picker.Items.Clear()
+        foreach ($entry in $entries) { [void]$Row.Picker.Items.Add($entry) }
+    }
+
+    $index = 0
+    if (-not [string]::IsNullOrWhiteSpace($current)) {
+        for ($i = 0; $i -lt $entries.Count; $i++) {
+            if ($entries[$i] -eq $current) { $index = $i; break }
+        }
+    }
+    if ($Row.Picker.SelectedIndex -ne $index) { $Row.Picker.SelectedIndex = $index }
+    $Row.SelectedVersion = $current
+    if ($stale) {
+        Add-LogLine -Level Warning -Message ((Get-UiText 'Software.VersionStale') -f $current)
+    }
+}
+
+function Get-SoftwareInstallItem {
+    <#
+    .SYNOPSIS
+        Returns the catalog entry to install for a row.
+    .DESCRIPTION
+        "Latest" removes any configured version. A specific selection uses a
+        copy of the entry so the in-memory catalog is never modified.
+    #>
+    param($Row)
+
+    if ($null -eq $Row -or $null -eq $Row.Item) { return $null }
+    $item = $Row.Item
+    # Accept both a catalog display item and the raw Software.json entry.
+    if ($null -ne $item.PSObject.Properties['Item'] -and $null -ne $item.Item) { $item = $item.Item }
+    $version = [string]$Row.SelectedVersion
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        if ($null -eq $item.PSObject.Properties['Version']) { return $item }
+        if ([string]::IsNullOrWhiteSpace([string]$item.Version)) { return $item }
+    }
+
+    $copy = $item.PSObject.Copy()
+    # Add-Member is required: assigning a property that does not exist yet
+    # fails on a PSCustomObject copy in Windows PowerShell 5.1.
+    $copy | Add-Member -NotePropertyName 'Version' -NotePropertyValue $version -Force
+    return $copy
 }
 
 function Refresh-SoftwareList {
@@ -1481,6 +1600,9 @@ function Update-SoftwareActions {
     $script:SoftwareUpdateButton.IsEnabled = ($updateCount -gt 0) -and (-not $script:Busy)
     $script:SoftwareUninstallButton.IsEnabled = ($uninstallCount -gt 0) -and (-not $script:Busy)
     $script:SoftwareCheckButton.IsEnabled = -not $script:Busy
+    foreach ($row in $script:SoftwareRows) {
+        if ($null -ne $row.Picker) { $row.Picker.IsEnabled = -not $script:Busy }
+    }
 
     if ($script:SoftwareChecked) {
         $script:SoftwareSummary.Text = ((Get-UiText 'Software.CheckSummary') -f `
@@ -1530,6 +1652,10 @@ function Complete-SoftwareCheck {
         $row.Pinned = ($null -ne $check.PSObject.Properties['Pinned']) -and [bool]$check.Pinned
         $row.PinnedVersion = ''
         if ($null -ne $check.PSObject.Properties['PinnedVersion']) { $row.PinnedVersion = [string]$check.PinnedVersion }
+
+        $versions = @()
+        if ($null -ne $check.PSObject.Properties['Versions']) { $versions = @($check.Versions) }
+        Update-SoftwareVersionPicker -Row $row -Versions $versions
 
         if (-not $row.Installed) {
             $row.Version.Text = Get-UiText 'Check.NotInstalled'
@@ -1709,7 +1835,13 @@ function Start-NextSoftware {
             Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Installing') -Tone 'Accent'
             $label = ((Get-UiText 'Install.Step') -f $row.Name, $script:QueueIndex, $script:QueueTotal)
             if ($row.Kind -eq 'winget') {
-                Start-SetupTask -Label $label -Command 'Install-SetupWingetApp' -Parameters @{ App = $row.Item } -OnComplete 'Complete-SoftwareStep'
+                $installItem = Get-SoftwareInstallItem -Row $row
+                $version = ''
+                if ($null -ne $installItem.PSObject.Properties['Version']) { $version = [string]$installItem.Version }
+                if (-not [string]::IsNullOrWhiteSpace($version)) {
+                    Add-LogLine -Level Info -Message ((Get-UiText 'Install.Version') -f $row.Name, $version)
+                }
+                Start-SetupTask -Label $label -Command 'Install-SetupWingetApp' -Parameters @{ App = $installItem } -OnComplete 'Complete-SoftwareStep'
             } else {
                 Start-SetupTask -Label $label -Command 'Install-SetupLocalPackage' -Parameters @{ Installer = $row.Item } -OnComplete 'Complete-SoftwareStep'
             }

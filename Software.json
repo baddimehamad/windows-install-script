@@ -12,6 +12,7 @@
       "Name": "Mozilla Firefox",
       "Type": "winget",
       "Id": "Mozilla.Firefox",
+      "VersionPicker": true,
       "Logo": "logo/firefox.png",
       "Enabled": true
     },
