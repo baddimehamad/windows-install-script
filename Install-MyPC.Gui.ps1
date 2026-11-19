@@ -1906,6 +1906,15 @@ function New-SoftwareRow {
         $menu.Placement = [System.Windows.Controls.Primitives.PlacementMode]::Bottom
         $menu.IsOpen = $true
     })
+    $menu.Add_Opened({
+        param($sender, $e)
+        $target = $sender.PlacementTarget
+        if ($null -eq $target) { return }
+        # The chevron sits in the last column. Align the menu's right edge with
+        # the button instead of its left edge, otherwise the menu grows past
+        # the window edge and is cut off on smaller displays.
+        $sender.HorizontalOffset = [Math]::Min(0, $target.ActualWidth - $sender.ActualWidth)
+    })
 
     return $row
 }
