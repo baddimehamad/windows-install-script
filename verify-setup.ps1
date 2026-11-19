@@ -372,6 +372,22 @@ Assert-True (-not $defaultMissing.Success) 'Set-SetupDefaultPrinter refuses a mi
 $testMissing = Test-SetupPrinterPage -Name 'Setup Verify Missing Printer'
 Assert-True (-not $testMissing.Success) 'Test-SetupPrinterPage refuses a missing printer'
 
+$launchShape = Get-SetupSoftwareLaunchInfo -CatalogItem $catalog[0]
+Assert-True (($null -ne $launchShape.PSObject.Properties['CanLaunch']) -and ($null -ne $launchShape.PSObject.Properties['CanOpenFolder'])) 'Get-SetupSoftwareLaunchInfo reports launch and folder flags'
+
+$missingSoftware = [pscustomobject]@{
+    Kind = 'winget'
+    Name = 'Setup Verify Missing Software 9f3c'
+    Id   = 'Setup.Verify.NoSuchPackage'
+    Item = [pscustomobject]@{ Type = 'winget'; Name = 'Setup Verify Missing Software 9f3c'; Id = 'Setup.Verify.NoSuchPackage' }
+}
+$missingInfo = Get-SetupSoftwareLaunchInfo -CatalogItem $missingSoftware
+Assert-True ((-not $missingInfo.Success) -and (-not $missingInfo.CanLaunch) -and (-not $missingInfo.CanOpenFolder)) 'The launch lookup refuses an unknown application'
+$missingLaunch = Invoke-SetupSoftwareLaunch -CatalogItem $missingSoftware
+Assert-True (-not $missingLaunch.Success) 'Invoke-SetupSoftwareLaunch refuses an unknown application'
+$missingFolder = Show-SetupSoftwareFolder -CatalogItem $missingSoftware
+Assert-True (-not $missingFolder.Success) 'Show-SetupSoftwareFolder refuses an unknown application'
+
 # --------------------------------------------------------------------------
 # 6. Report export
 # --------------------------------------------------------------------------
@@ -448,6 +464,8 @@ Assert-True ($guiText -match 'x:Name="NavSystem"' -and $guiText -match 'x:Name="
 Assert-True ($guiText -match 'SystemPowerApply' -and $guiText -match 'SystemDnsApply' -and $guiText -match 'SystemTempClean') 'The window exposes the maintenance actions'
 Assert-True ($consoleText -match 'Show-SystemMaintenance' -and $consoleText -match 'Set-SetupDnsPreset' -and $consoleText -match 'Clear-SetupTempFiles') 'The console exposes the maintenance actions'
 Assert-True ($guiText -match 'Set-SetupPowerSettings' -and $consoleText -match 'Set-SetupPowerPlan') 'Both front-ends share the power actions'
+Assert-True ($guiText -match 'Software.Action.Open' -and $guiText -match 'Software.Action.Location' -and $guiText -match 'Start-SoftwareOpen') 'The window offers open software and folder actions'
+Assert-True ($guiText -match 'Invoke-SetupSoftwareLaunch' -and $guiText -match 'Show-SetupSoftwareFolder') 'The window uses the shared launch actions'
 
 $guardedWrite = [regex]::Match($guiText, '(?s)(Set-Content|Out-File|Export-Csv|ConvertTo-Json)[^\r\n]{0,200}Software\.json')
 Assert-True (-not $guardedWrite.Success) 'The window never writes Software.json'

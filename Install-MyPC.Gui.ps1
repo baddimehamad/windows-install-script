@@ -142,6 +142,12 @@ $script:StringTable = @{
     'Software.ColUpdate'        = @{ en = "Available update"; fr = "Mise a jour" }
     'Software.ColType'          = @{ en = "Type"; fr = "Type" }
     'Software.ColStatus'        = @{ en = "Status"; fr = "Etat" }
+    'Software.Actions'          = @{ en = "Open software or its folder"; fr = "Ouvrir le logiciel ou son dossier" }
+    'Software.Action.Open'      = @{ en = "Open software"; fr = "Ouvrir le logiciel" }
+    'Software.Action.Location'  = @{ en = "Open file location"; fr = "Ouvrir l'emplacement" }
+    'Software.Action.Opening'   = @{ en = "Opening {0} ..."; fr = "Ouverture de {0} ..." }
+    'Software.Action.OpeningLocation' = @{ en = "Opening the folder for {0} ..."; fr = "Ouverture du dossier de {0} ..." }
+    'Software.Action.FailedTitle' = @{ en = "Cannot open"; fr = "Ouverture impossible" }
     'Software.VersionLatest'    = @{ en = "Latest"; fr = "Derniere" }
     'Software.VersionTooltip'   = @{ en = "Version used by 'Install selected'. 'Latest' follows the newest release published by winget. Use the refresh icon beside this list to reload it, or the check button for every application."; fr = "Version utilisee par 'Installer la selection'. 'Derniere' suit la version la plus recente publiee par winget. Utilisez l'icone d'actualisation a cote de cette liste pour la recharger, ou le bouton de verification pour toutes les applications." }
     'Software.VersionStale'     = @{ en = "The selected version {0} is no longer listed by winget; it is kept so the choice does not change silently."; fr = "La version selectionnee {0} n'est plus listee par winget ; elle est conservee pour que le choix ne change pas silencieusement." }
@@ -904,11 +910,12 @@ $xaml = @'
                     <ColumnDefinition Width="32"/>
                     <ColumnDefinition Width="40"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="140"/>
                     <ColumnDefinition Width="120"/>
-                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="100"/>
                     <ColumnDefinition Width="70"/>
                     <ColumnDefinition Width="110"/>
+                    <ColumnDefinition Width="30"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="2" Text="@@Software.ColApplication@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
                   <TextBlock Grid.Column="3" Text="@@Software.ColVersion@@" FontSize="11" FontWeight="SemiBold" Foreground="#5F6B76" VerticalAlignment="Center"/>
@@ -1697,7 +1704,7 @@ function New-SoftwareRow {
     $container.BorderThickness = [System.Windows.Thickness]::new(0, 0, 0, 1)
     $container.Padding = [System.Windows.Thickness]::new(12, 9, 12, 9)
 
-    $grid = New-UiGrid -Columns @('32', '40', '*', '140', '150', '120', '70', '110')
+    $grid = New-UiGrid -Columns @('32', '40', '*', '120', '150', '100', '70', '110', '30')
 
     $checkBox = [System.Windows.Controls.CheckBox]::new()
     $checkBox.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
@@ -1793,6 +1800,20 @@ function New-SoftwareRow {
     [System.Windows.Controls.Grid]::SetColumn($status, 7)
     [void]$grid.Children.Add($status)
 
+    $actions = [System.Windows.Controls.Button]::new()
+    $actions.Width = 26
+    $actions.Height = 24
+    $actions.Padding = [System.Windows.Thickness]::new(0)
+    $actions.Content = [string][char]0xE70D
+    $actions.FontFamily = [System.Windows.Media.FontFamily]::new('Segoe MDL2 Assets')
+    $actions.FontSize = 10
+    $actions.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+    $actions.HorizontalAlignment = [System.Windows.HorizontalAlignment]::Right
+    $actions.Style = $script:Window.Resources['SecondaryButton']
+    $actions.ToolTip = Get-UiText 'Software.Actions'
+    [System.Windows.Controls.Grid]::SetColumn($actions, 8)
+    [void]$grid.Children.Add($actions)
+
     $container.Child = $grid
     $container.Add_MouseEnter({ param($sender, $e) $sender.Background = Get-Brush '#F8FAFC' })
     $container.Add_MouseLeave({ param($sender, $e) $sender.Background = Get-Brush '#FFFFFF' })
@@ -1822,6 +1843,7 @@ function New-SoftwareRow {
         PinnedVersion   = ''
         Uninstallable   = $false
         WingetManaged   = $false
+        Actions         = $actions
     }
 
     if ($null -ne $picker) {
@@ -1849,6 +1871,41 @@ function New-SoftwareRow {
             Start-SoftwareVersionRefresh -Row $owner
         })
     }
+
+    # The per-row dropdown: a small chevron button that opens two actions.
+    # Launching and folder lookup run in the background because resolving a
+    # Start menu shortcut reads the registry and the shortcut file.
+    $menu = [System.Windows.Controls.ContextMenu]::new()
+
+    $openAction = [System.Windows.Controls.MenuItem]::new()
+    $openAction.Header = Get-UiText 'Software.Action.Open'
+    $openAction.Tag = $row
+    $openAction.Add_Click({
+        param($sender, $e)
+        $owner = $sender.Tag
+        if ($null -ne $owner) { Start-SoftwareOpen -Row $owner -Folder $false }
+    })
+
+    $folderAction = [System.Windows.Controls.MenuItem]::new()
+    $folderAction.Header = Get-UiText 'Software.Action.Location'
+    $folderAction.Tag = $row
+    $folderAction.Add_Click({
+        param($sender, $e)
+        $owner = $sender.Tag
+        if ($null -ne $owner) { Start-SoftwareOpen -Row $owner -Folder $true }
+    })
+
+    [void]$menu.Items.Add($openAction)
+    [void]$menu.Items.Add($folderAction)
+    $actions.ContextMenu = $menu
+    $actions.Add_Click({
+        param($sender, $e)
+        $menu = $sender.ContextMenu
+        if ($null -eq $menu) { return }
+        $menu.PlacementTarget = $sender
+        $menu.Placement = [System.Windows.Controls.Primitives.PlacementMode]::Bottom
+        $menu.IsOpen = $true
+    })
 
     return $row
 }
@@ -1947,6 +2004,33 @@ function Complete-SoftwareVersionRefresh {
 
     Update-SoftwareVersionPicker -Row $row -Versions $versions
     Add-LogLine -Level Info -Message ((Get-UiText 'Versions.Refreshed') -f $row.Name, $versions.Count)
+}
+
+function Start-SoftwareOpen {
+    param($Row, [bool]$Folder = $false)
+    if ($script:Busy -or $null -eq $Row) { return }
+
+    if ($Folder) {
+        Start-SetupTask -Label ((Get-UiText 'Software.Action.OpeningLocation') -f $Row.Name) `
+            -Command 'Show-SetupSoftwareFolder' -Parameters @{ CatalogItem = $Row.Item } `
+            -OnComplete 'Complete-SoftwareOpenAction'
+    } else {
+        Start-SetupTask -Label ((Get-UiText 'Software.Action.Opening') -f $Row.Name) `
+            -Command 'Invoke-SetupSoftwareLaunch' -Parameters @{ CatalogItem = $Row.Item } `
+            -OnComplete 'Complete-SoftwareOpenAction'
+    }
+}
+
+function Complete-SoftwareOpenAction {
+    $result = Get-FirstResult
+    if ($null -eq $result) { return }
+    [void]$script:SessionResults.Add($result)
+    if ($result.Success) {
+        Add-LogLine -Level Info -Message ([string]$result.Message)
+    } else {
+        Show-Message ($result.Message + "`r`n`r`n" + (Get-UiText 'Common.SeeLog')) `
+            (Get-UiText 'Software.Action.FailedTitle') 'Warning'
+    }
 }
 
 function Get-SoftwareInstallItem {
@@ -2107,6 +2191,7 @@ function Update-SoftwareActions {
     foreach ($row in $script:SoftwareRows) {
         if ($null -ne $row.Picker) { $row.Picker.IsEnabled = -not $script:Busy }
         if ($null -ne $row.Refresh) { $row.Refresh.IsEnabled = -not $script:Busy }
+        if ($null -ne $row.Actions) { $row.Actions.IsEnabled = -not $script:Busy }
     }
 
     if ($script:SoftwareChecked) {
@@ -4294,6 +4379,12 @@ if ($NoShow) {
     # Smoke test path: the whole window was built and every card populated.
     $smokeDashboard = Get-SetupSystemDashboard -SkipInternet
     Render-SystemDashboard -Dashboard $smokeDashboard
+    $badActions = @($script:SoftwareRows | Where-Object {
+        $null -eq $_.Actions -or $null -eq $_.Actions.ContextMenu -or $_.Actions.ContextMenu.Items.Count -ne 2
+    })
+    if ($badActions.Count -gt 0) {
+        throw ("The row action menu is missing on {0} software row(s)." -f $badActions.Count)
+    }
     Write-Output ('GUI OK: {0} software item(s), {1} categories, {2} profiles, {3} printer(s), {4} user(s), {5} system section(s).' -f `
         $script:SoftwareRows.Count, ($script:SoftwareCategory.Items.Count - 1), ($script:SoftwareProfile.Items.Count - 1), $script:PrinterRows.Count, $script:UserRows.Count, @($smokeDashboard.Sections).Count)
     $script:Window.Close()

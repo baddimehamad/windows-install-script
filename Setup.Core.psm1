@@ -3001,6 +3001,7 @@ function Get-SetupUninstallRegistryEntries {
                 Publisher            = ([string]$entry.Publisher).Trim()
                 UninstallString      = ([string]$entry.UninstallString).Trim()
                 QuietUninstallString = ([string]$entry.QuietUninstallString).Trim()
+                DisplayIcon          = ([string]$entry.DisplayIcon).Trim()
                 InstallLocation      = ([string]$entry.InstallLocation).Trim()
                 KeyName              = [string]$entry.PSChildName
             })
@@ -3444,6 +3445,535 @@ function Get-SetupInstalledSoftware {
         }
     Write-SetupLog -Level Success -Message ("Installed software check finished: {0} installed, {1} update(s) available." -f $installedCount, $updateCount)
     return $result
+}
+
+# --------------------------------------------------------------------------
+# Opening installed software and its folder
+# --------------------------------------------------------------------------
+
+function ConvertTo-SetupNameKey {
+    <#
+    .SYNOPSIS
+        Normalizes a display name so shortcuts can be compared safely.
+    #>
+    param([string]$Text)
+    $value = ([string]$Text).ToLowerInvariant()
+    $value = $value -replace '\([^)]*\)', ' '
+    $value = $value -replace '&', ' and '
+    $value = $value -replace '[^a-z0-9]+', ''
+    return $value
+}
+
+function Get-SetupNameTokens {
+    <#
+    .SYNOPSIS
+        Splits a display name into lowercase words for boundary matching.
+    #>
+    param([string]$Text)
+    $value = ([string]$Text).ToLowerInvariant()
+    $value = $value -replace '\([^)]*\)', ' '
+    return @($value -split '[^a-z0-9]+' | Where-Object { $_.Length -gt 0 })
+}
+
+function Get-SetupSoftwareNameVariants {
+    <#
+    .SYNOPSIS
+        Builds the name forms used to match a Start menu shortcut or folder.
+    #>
+    param([string]$Name, [string]$Id = '')
+
+    $variants = [System.Collections.Generic.List[object]]::new()
+    $seen = @{}
+    $add = {
+        param([string]$Value)
+        if ([string]::IsNullOrWhiteSpace($Value)) { return }
+        $key = ConvertTo-SetupNameKey $Value
+        if ($key.Length -lt 2 -or $seen.ContainsKey($key)) { return }
+        $seen[$key] = $true
+        [void]$variants.Add([pscustomobject]@{
+            Raw    = ([string]$Value).Trim()
+            Key    = $key
+            Tokens = @(Get-SetupNameTokens $Value)
+        })
+    }
+
+    & $add $Name
+    foreach ($prefix in @('Microsoft', 'Google', 'Mozilla', 'Adobe')) {
+        $pattern = ('(?i)^' + [regex]::Escape($prefix) + '\s+(.+)$')
+        if ($Name -match $pattern) { & $add $matches[1] }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Id)) {
+        $last = [string](@($Id -split '\.')[-1])
+        & $add $last
+    }
+    return $variants.ToArray()
+}
+
+function Get-SetupNameMatchScore {
+    <#
+    .SYNOPSIS
+        Scores how closely a shortcut or executable name matches a catalog name.
+    .DESCRIPTION
+        Exact names win. A whole-word prefix or suffix and a distinctive
+        normalized prefix are accepted; short fragments such as "git" are not
+        allowed to match "GitHub".
+    #>
+    param([string]$Candidate, [object[]]$Variants)
+
+    $candidateKey = ConvertTo-SetupNameKey $Candidate
+    if ($candidateKey.Length -lt 2) { return 0 }
+    $candidateTokens = @(Get-SetupNameTokens $Candidate)
+    $best = 0
+
+    foreach ($variant in @($Variants)) {
+        if ($null -eq $variant) { continue }
+        if ($candidateKey -eq [string]$variant.Key) { return 100 }
+
+        $variantTokens = @($variant.Tokens)
+        if ($variantTokens.Count -gt 0 -and $candidateTokens.Count -ge $variantTokens.Count) {
+            $samePrefix = $true
+            for ($index = 0; $index -lt $variantTokens.Count; $index++) {
+                if ($candidateTokens[$index] -ne $variantTokens[$index]) { $samePrefix = $false; break }
+            }
+            if ($samePrefix) { $best = [Math]::Max($best, 85) }
+
+            $offset = $candidateTokens.Count - $variantTokens.Count
+            $sameSuffix = $true
+            for ($index = 0; $index -lt $variantTokens.Count; $index++) {
+                if ($candidateTokens[$offset + $index] -ne $variantTokens[$index]) { $sameSuffix = $false; break }
+            }
+            if ($sameSuffix) { $best = [Math]::Max($best, 80) }
+        }
+
+        $variantKey = [string]$variant.Key
+        if (-not [string]::IsNullOrWhiteSpace($variantKey)) {
+            $shortest = [Math]::Min($candidateKey.Length, $variantKey.Length)
+            if ($shortest -ge 4 -and (
+                    $candidateKey.StartsWith($variantKey, [System.StringComparison]::Ordinal) -or
+                    $variantKey.StartsWith($candidateKey, [System.StringComparison]::Ordinal) -or
+                    $candidateKey.EndsWith($variantKey, [System.StringComparison]::Ordinal) -or
+                    $variantKey.EndsWith($candidateKey, [System.StringComparison]::Ordinal))) {
+                $best = [Math]::Max($best, 70)
+            }
+        }
+    }
+    return $best
+}
+
+function ConvertFrom-SetupDisplayIcon {
+    <#
+    .SYNOPSIS
+        Extracts a file path from an Add/Remove Programs DisplayIcon value.
+    #>
+    param([string]$Value)
+    $text = ([string]$Value).Trim()
+    if ($text.Length -eq 0) { return '' }
+    if ($text.StartsWith('"')) {
+        $end = $text.IndexOf('"', 1)
+        if ($end -gt 1) { $text = $text.Substring(1, $end - 1) }
+    } else {
+        $comma = $text.LastIndexOf(',')
+        if ($comma -gt 0) {
+            $suffix = $text.Substring($comma + 1)
+            if ($suffix -match '^\s*-?\d+\s*$') { $text = $text.Substring(0, $comma) }
+        }
+        $text = $text.Trim('"')
+    }
+    $text = [Environment]::ExpandEnvironmentVariables($text.Trim())
+    return $text
+}
+
+function Get-SetupShortcutTarget {
+    <#
+    .SYNOPSIS
+        Resolves one .lnk file without starting it.
+    #>
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+
+    $shell = $null
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($Path)
+        $target = [Environment]::ExpandEnvironmentVariables([string]$shortcut.TargetPath)
+        return [pscustomobject]@{
+            TargetPath       = $target
+            Arguments        = [string]$shortcut.Arguments
+            WorkingDirectory = [string]$shortcut.WorkingDirectory
+        }
+    } catch {
+        return $null
+    } finally {
+        if ($null -ne $shell) {
+            try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($shell) } catch { }
+        }
+    }
+}
+
+function Get-SetupStartMenuTarget {
+    <#
+    .SYNOPSIS
+        Finds the best Start menu shortcut for a catalog name.
+    #>
+    param([object[]]$Variants)
+
+    $roots = [System.Collections.Generic.List[string]]::new()
+    foreach ($folder in @([System.Environment+SpecialFolder]::CommonStartMenu, [System.Environment+SpecialFolder]::StartMenu)) {
+        try {
+            $path = [Environment]::GetFolderPath($folder)
+            if ([string]::IsNullOrWhiteSpace($path)) { continue }
+            $programs = Join-Path $path 'Programs'
+            if (Test-Path -LiteralPath $programs -PathType Container) { $roots.Add($programs) }
+        } catch { }
+    }
+    if ($roots.Count -eq 0) { return $null }
+
+    $blocked = '(?i)(uninstall|readme|help|website|documentation|release notes|license|update|repair|settings|configuration|manual|support)'
+    $best = $null
+    $bestScore = 0
+    $bestTokens = 999
+
+    foreach ($root in $roots) {
+        $shortcuts = @(Get-ChildItem -LiteralPath $root -Filter '*.lnk' -Recurse -File -ErrorAction SilentlyContinue)
+        foreach ($shortcut in $shortcuts) {
+            $baseName = [string]$shortcut.BaseName
+            if ([string]::IsNullOrWhiteSpace($baseName) -or $baseName -match $blocked) { continue }
+            $score = Get-SetupNameMatchScore -Candidate $baseName -Variants $Variants
+            if ($score -lt 70) { continue }
+            $tokenCount = @(Get-SetupNameTokens $baseName).Count
+            if ($score -lt $bestScore -or ($score -eq $bestScore -and $tokenCount -ge $bestTokens)) { continue }
+
+            $target = Get-SetupShortcutTarget -Path $shortcut.FullName
+            if ($null -eq $target) { continue }
+            $targetPath = [string]$target.TargetPath
+            if ([string]::IsNullOrWhiteSpace($targetPath)) { continue }
+            if (-not (Test-Path -LiteralPath $targetPath -PathType Leaf)) { continue }
+            if ([IO.Path]::GetExtension($targetPath) -ne '.exe') { continue }
+            if ($targetPath -match '(?i)(unins|uninstall|setup|update)') { continue }
+
+            $best = [pscustomobject]@{
+                ShortcutPath     = $shortcut.FullName
+                TargetPath       = $targetPath
+                Arguments        = [string]$target.Arguments
+                WorkingDirectory = [string]$target.WorkingDirectory
+            }
+            $bestScore = $score
+            $bestTokens = $tokenCount
+        }
+    }
+    return $best
+}
+
+function Get-SetupFolderExecutable {
+    <#
+    .SYNOPSIS
+        Picks the most likely executable in an application's install folder.
+    #>
+    param([string]$Folder, [object[]]$Variants)
+
+    if ([string]::IsNullOrWhiteSpace($Folder) -or -not (Test-Path -LiteralPath $Folder -PathType Container)) { return '' }
+    $blocked = '(?i)(unins|uninstall|setup|update|helper|crash|report|notification|elevate|repair)'
+    $candidates = @(Get-ChildItem -LiteralPath $Folder -Filter '*.exe' -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.BaseName -notmatch $blocked })
+    if ($candidates.Count -eq 0) { return '' }
+
+    $best = ''
+    $bestScore = 0
+    $bestLength = 999
+    foreach ($candidate in $candidates) {
+        $score = Get-SetupNameMatchScore -Candidate $candidate.BaseName -Variants $Variants
+        $length = $candidate.BaseName.Length
+        if ($score -gt $bestScore -or ($score -eq $bestScore -and $score -gt 0 -and $length -lt $bestLength)) {
+            $best = [string]$candidate.FullName
+            $bestScore = $score
+            $bestLength = $length
+        }
+    }
+    if ($bestScore -ge 70) { return $best }
+    if ($candidates.Count -eq 1) { return [string]$candidates[0].FullName }
+    return ''
+}
+
+function Get-SetupAppPathExecutable {
+    <#
+    .SYNOPSIS
+        Looks up an exact executable match in the App Paths registry keys.
+    #>
+    param([object[]]$Variants)
+
+    $roots = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths'
+    )
+    $best = ''
+    foreach ($root in $roots) {
+        foreach ($key in @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)) {
+            $baseName = [IO.Path]::GetFileNameWithoutExtension([string]$key.PSChildName)
+            $score = Get-SetupNameMatchScore -Candidate $baseName -Variants $Variants
+            if ($score -lt 100) { continue }
+            try { $value = [string]$key.GetValue('') } catch { continue }
+            $value = [Environment]::ExpandEnvironmentVariables($value.Trim().Trim('"'))
+            if (-not [string]::IsNullOrWhiteSpace($value) -and (Test-Path -LiteralPath $value -PathType Leaf) -and
+                [IO.Path]::GetExtension($value) -eq '.exe') {
+                $best = $value
+                break
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($best)) { break }
+    }
+    return $best
+}
+
+function Get-SetupStartAppsTarget {
+    <#
+    .SYNOPSIS
+        Falls back to the Start menu application list, including Store apps.
+    #>
+    param([object[]]$Variants)
+
+    $apps = @()
+    try { $apps = @(Get-StartApps -ErrorAction Stop) } catch { return $null }
+
+    $best = $null
+    $bestScore = 0
+    $bestTokens = 999
+    foreach ($app in $apps) {
+        $name = [string]$app.Name
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+        $score = Get-SetupNameMatchScore -Candidate $name -Variants $Variants
+        if ($score -lt 85) { continue }
+        $tokenCount = @(Get-SetupNameTokens $name).Count
+        if ($score -lt $bestScore -or ($score -eq $bestScore -and $tokenCount -ge $bestTokens)) { continue }
+
+        $appId = ([string]$app.AppID).Trim()
+        if ([string]::IsNullOrWhiteSpace($appId)) { continue }
+        if ($appId.Contains('!')) {
+            $best = [pscustomobject]@{
+                LaunchPath = 'explorer.exe'
+                Arguments  = ('shell:AppsFolder\{0}' -f $appId)
+                Source     = 'Start menu app'
+            }
+        } elseif ($appId -match '^[A-Za-z]:\\' -and (Test-Path -LiteralPath $appId -PathType Leaf) -and
+            [IO.Path]::GetExtension($appId) -eq '.exe') {
+            $best = [pscustomobject]@{
+                LaunchPath = $appId
+                Arguments  = ''
+                Source     = 'Start menu app'
+            }
+        } else {
+            continue
+        }
+        $bestScore = $score
+        $bestTokens = $tokenCount
+    }
+    return $best
+}
+
+function Get-SetupSoftwareLaunchInfo {
+    <#
+    .SYNOPSIS
+        Locates the installed executable and folder behind a catalog entry.
+    .DESCRIPTION
+        Read-only. The uninstall entry, its DisplayIcon, the install folder,
+        Start menu shortcuts, App Paths and the Start app list are checked in
+        that order. Nothing is started.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)]$CatalogItem)
+
+    $entry = Get-SetupCatalogEntry -Item $CatalogItem
+    $name = [string]$CatalogItem.Name
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = [string]$entry.Name }
+    $id = [string]$entry.Id
+
+    $launchPath = ''
+    $arguments = ''
+    $workingDirectory = ''
+    $folderPath = ''
+    $selectedPath = ''
+    $source = ''
+
+    $registryEntry = $null
+    try {
+        $registryEntries = @(Get-SetupUninstallRegistryEntries)
+        if ($registryEntries.Count -gt 0) {
+            $registryEntry = Find-SetupRegistryEntry -Entries $registryEntries -Item $CatalogItem
+        }
+    } catch { }
+
+    $variants = @(Get-SetupSoftwareNameVariants -Name $name -Id $id)
+    if ($variants.Count -eq 0) { $variants = @(Get-SetupSoftwareNameVariants -Name $name) }
+
+    # 1. The Add/Remove Programs icon often points straight at the main exe.
+    if ($null -ne $registryEntry) {
+        $iconPath = ConvertFrom-SetupDisplayIcon -Value ([string]$registryEntry.DisplayIcon)
+        if (-not [string]::IsNullOrWhiteSpace($iconPath) -and (Test-Path -LiteralPath $iconPath -PathType Leaf) -and
+            [IO.Path]::GetExtension($iconPath) -eq '.exe') {
+            $launchPath = $iconPath
+            $source = 'Uninstall entry'
+        }
+    }
+
+    # 2. The registered install folder. This also gives the folder action a
+    #    target when no executable can be identified.
+    if ($null -ne $registryEntry) {
+        $installFolder = [Environment]::ExpandEnvironmentVariables([string]$registryEntry.InstallLocation).Trim().Trim('"')
+        if (-not [string]::IsNullOrWhiteSpace($installFolder) -and (Test-Path -LiteralPath $installFolder -PathType Container)) {
+            $folderPath = $installFolder
+            if ([string]::IsNullOrWhiteSpace($launchPath)) {
+                $candidate = Get-SetupFolderExecutable -Folder $installFolder -Variants $variants
+                if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+                    $launchPath = $candidate
+                    $source = 'Install folder'
+                }
+            }
+        }
+    }
+
+    # 3. A Start menu shortcut covers installers that do not register a folder.
+    if ([string]::IsNullOrWhiteSpace($launchPath)) {
+        $shortcut = Get-SetupStartMenuTarget -Variants $variants
+        if ($null -ne $shortcut) {
+            $launchPath = [string]$shortcut.ShortcutPath
+            $selectedPath = [string]$shortcut.TargetPath
+            $workingDirectory = [string]$shortcut.WorkingDirectory
+            if ([string]::IsNullOrWhiteSpace($folderPath)) { $folderPath = Split-Path -Parent $selectedPath }
+            $source = 'Start menu shortcut'
+        }
+    }
+
+    # 4. Exact App Paths registration.
+    if ([string]::IsNullOrWhiteSpace($launchPath)) {
+        $candidate = Get-SetupAppPathExecutable -Variants $variants
+        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+            $launchPath = $candidate
+            $source = 'App Paths'
+        }
+    }
+
+    # 5. Start menu app list (Store apps have no install folder).
+    if ([string]::IsNullOrWhiteSpace($launchPath)) {
+        $startApp = Get-SetupStartAppsTarget -Variants $variants
+        if ($null -ne $startApp) {
+            $launchPath = [string]$startApp.LaunchPath
+            $arguments = [string]$startApp.Arguments
+            $source = [string]$startApp.Source
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($launchPath) -and $launchPath -ne 'explorer.exe') {
+        if ([string]::IsNullOrWhiteSpace($selectedPath)) { $selectedPath = $launchPath }
+        if ([string]::IsNullOrWhiteSpace($folderPath) -and (Test-Path -LiteralPath $launchPath -PathType Leaf)) {
+            $folderPath = Split-Path -Parent $launchPath
+        }
+    }
+
+    $message = ''
+    if ([string]::IsNullOrWhiteSpace($launchPath) -and [string]::IsNullOrWhiteSpace($folderPath)) {
+        $message = ("Could not find an installed program or folder for '{0}'." -f $name)
+    }
+
+    return [pscustomobject]@{
+        Success       = (-not [string]::IsNullOrWhiteSpace($launchPath)) -or (-not [string]::IsNullOrWhiteSpace($folderPath))
+        Name          = $name
+        LaunchPath    = $launchPath
+        Arguments     = $arguments
+        WorkingDirectory = $workingDirectory
+        FolderPath    = $folderPath
+        SelectedPath  = $selectedPath
+        Source        = $source
+        CanLaunch     = -not [string]::IsNullOrWhiteSpace($launchPath)
+        CanOpenFolder = -not [string]::IsNullOrWhiteSpace($folderPath)
+        Message       = $message
+    }
+}
+
+function Invoke-SetupSoftwareLaunch {
+    <#
+    .SYNOPSIS
+        Starts an installed application found from its catalog entry.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)]$CatalogItem)
+
+    $info = Get-SetupSoftwareLaunchInfo -CatalogItem $CatalogItem
+    if (-not $info.CanLaunch) {
+        $message = ("Could not find a program to start for '{0}'. Open it from the Start menu instead." -f $info.Name)
+        Write-SetupLog -Level Warning -Message $message
+        return New-SetupResult -Name $info.Name -Success $false -Message $message `
+            -Data @{ FolderPath = $info.FolderPath; Source = $info.Source }
+    }
+
+    try {
+        if ($info.LaunchPath -eq 'explorer.exe') {
+            # Store apps and shell targets are already launched by Explorer.
+            Start-Process -FilePath 'explorer.exe' -ArgumentList ([string]$info.Arguments) -ErrorAction Stop
+        } elseif (Test-SetupElevated) {
+            # The window runs elevated. Launching a browser or editor directly
+            # would give it an administrator token; hand it to the desktop
+            # shell so it starts with the signed-in user's normal rights.
+            $argument = ('"{0}"' -f $info.LaunchPath)
+            Start-Process -FilePath 'explorer.exe' -ArgumentList $argument -ErrorAction Stop
+        } else {
+            $startParameters = @{ FilePath = $info.LaunchPath; ErrorAction = 'Stop' }
+            if (-not [string]::IsNullOrWhiteSpace([string]$info.Arguments)) {
+                $startParameters['ArgumentList'] = [string]$info.Arguments
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$info.WorkingDirectory) -and
+                [IO.Path]::GetExtension($info.LaunchPath) -ne '.lnk') {
+                $startParameters['WorkingDirectory'] = [string]$info.WorkingDirectory
+            }
+            Start-Process @startParameters
+        }
+    } catch {
+        $message = ("Could not open '{0}': {1}" -f $info.Name, $_.Exception.Message)
+        Write-SetupLog -Level Error -Message $message
+        return New-SetupResult -Name $info.Name -Success $false -Message $message `
+            -Data @{ Path = $info.LaunchPath; Source = $info.Source }
+    }
+
+    $message = ("Opened {0}." -f $info.Name)
+    Write-SetupLog -Level Success -Message $message
+    return New-SetupResult -Name $info.Name -Success $true -Message $message `
+        -Data @{ Path = $info.LaunchPath; FolderPath = $info.FolderPath; Source = $info.Source }
+}
+
+function Show-SetupSoftwareFolder {
+    <#
+    .SYNOPSIS
+        Opens the install folder of a catalog entry in Explorer.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)]$CatalogItem)
+
+    $info = Get-SetupSoftwareLaunchInfo -CatalogItem $CatalogItem
+    if (-not $info.CanOpenFolder) {
+        $message = ("No file location is available for '{0}'. Microsoft Store apps do not expose one." -f $info.Name)
+        Write-SetupLog -Level Warning -Message $message
+        return New-SetupResult -Name $info.Name -Success $false -Message $message `
+            -Data @{ Path = $info.LaunchPath; Source = $info.Source }
+    }
+
+    try {
+        if (-not [string]::IsNullOrWhiteSpace([string]$info.SelectedPath) -and
+            (Test-Path -LiteralPath ([string]$info.SelectedPath) -PathType Leaf)) {
+            $argument = ('/select,"{0}"' -f [string]$info.SelectedPath)
+            Start-Process -FilePath 'explorer.exe' -ArgumentList $argument -ErrorAction Stop
+        } else {
+            Start-Process -FilePath ([string]$info.FolderPath) -ErrorAction Stop
+        }
+    } catch {
+        $message = ("Could not open the folder for '{0}': {1}" -f $info.Name, $_.Exception.Message)
+        Write-SetupLog -Level Error -Message $message
+        return New-SetupResult -Name $info.Name -Success $false -Message $message `
+            -Data @{ FolderPath = $info.FolderPath }
+    }
+
+    $message = ("Opened the folder for {0}." -f $info.Name)
+    Write-SetupLog -Level Success -Message $message
+    return New-SetupResult -Name $info.Name -Success $true -Message $message `
+        -Data @{ FolderPath = $info.FolderPath; SelectedPath = $info.SelectedPath }
 }
 
 function Uninstall-SetupSoftware {
@@ -4827,6 +5357,9 @@ Export-ModuleMember -Function @(
     'Install-SetupLocalPackage',
     'Get-SetupWingetVersions',
     'Get-SetupInstalledSoftware',
+    'Get-SetupSoftwareLaunchInfo',
+    'Invoke-SetupSoftwareLaunch',
+    'Show-SetupSoftwareFolder',
     'Uninstall-SetupSoftware',
     'Update-SetupSoftware',
     'Get-BuiltInAdminAccount',
