@@ -3976,6 +3976,189 @@ function Show-SetupSoftwareFolder {
         -Data @{ FolderPath = $info.FolderPath; SelectedPath = $info.SelectedPath }
 }
 
+# --------------------------------------------------------------------------
+# Desktop shortcuts
+# --------------------------------------------------------------------------
+
+function Get-SetupUserProfilePath {
+    <#
+    .SYNOPSIS
+        Returns the profile folder registered for a local user SID.
+    #>
+    param([string]$Sid)
+    if ([string]::IsNullOrWhiteSpace($Sid)) { return '' }
+    $key = ('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\{0}' -f $Sid)
+    try {
+        $value = [string](Get-ItemProperty -LiteralPath $key -Name 'ProfileImagePath' -ErrorAction Stop).ProfileImagePath
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return [Environment]::ExpandEnvironmentVariables($value.Trim())
+        }
+    } catch { }
+    return ''
+}
+
+function Get-SetupUserDesktopPath {
+    <#
+    .SYNOPSIS
+        Resolves the desktop folder of the user who started the setup.
+    .DESCRIPTION
+        The window runs elevated, so [Environment]::GetFolderPath('Desktop')
+        can point at a different administrator profile. The original user's
+        shell folder is read from HKEY_USERS first, then OneDrive-redirected
+        and conventional profile folders are tried.
+    #>
+    [CmdletBinding()]
+    param([string]$Sid = '')
+
+    $currentSid = ''
+    try { $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value } catch { }
+    if ([string]::IsNullOrWhiteSpace($Sid)) { $Sid = $currentSid }
+
+    if ([string]::IsNullOrWhiteSpace($Sid) -or $Sid -eq $currentSid) {
+        $currentDesktop = [Environment]::GetFolderPath('Desktop')
+        if (-not [string]::IsNullOrWhiteSpace($currentDesktop)) { return $currentDesktop }
+    }
+
+    $profilePath = Get-SetupUserProfilePath -Sid $Sid
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    $seen = @{}
+    $add = {
+        param([string]$Path)
+        if ([string]::IsNullOrWhiteSpace($Path)) { return }
+        $value = $Path.Trim().Trim('"')
+        if ([string]::IsNullOrWhiteSpace($value)) { return }
+        $key = $value.ToLowerInvariant()
+        if ($seen.ContainsKey($key)) { return }
+        $seen[$key] = $true
+        [void]$candidates.Add($value)
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Sid)) {
+        foreach ($root in @(
+                ('Registry::HKEY_USERS\{0}\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' -f $Sid),
+                ('Registry::HKEY_USERS\{0}\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -f $Sid)
+            )) {
+            try {
+                $value = [string](Get-ItemProperty -LiteralPath $root -Name 'Desktop' -ErrorAction Stop).Desktop
+            } catch { continue }
+            if ([string]::IsNullOrWhiteSpace($value)) { continue }
+            if (-not [string]::IsNullOrWhiteSpace($profilePath)) {
+                $escaped = $profilePath.Replace('$', '$$')
+                $value = $value -replace '(?i)%USERPROFILE%', $escaped
+            }
+            $value = [Environment]::ExpandEnvironmentVariables($value)
+            & $add $value
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($profilePath)) {
+        & $add (Join-Path $profilePath 'Desktop')
+        & $add (Join-Path $profilePath 'OneDrive\Desktop')
+        foreach ($folder in @(Get-ChildItem -LiteralPath $profilePath -Directory -Filter 'OneDrive*' -ErrorAction SilentlyContinue)) {
+            & $add (Join-Path $folder.FullName 'Desktop')
+        }
+    }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Container) { return $candidate }
+    }
+
+    # A shared shortcut is better than one placed in the administrator's own
+    # profile when the original profile cannot be resolved.
+    $publicDesktop = [Environment]::GetFolderPath('CommonDesktopDirectory')
+    if (-not [string]::IsNullOrWhiteSpace($publicDesktop)) { return $publicDesktop }
+    return [Environment]::GetFolderPath('Desktop')
+}
+
+function New-SetupSoftwareShortcut {
+    <#
+    .SYNOPSIS
+        Creates a desktop shortcut for an installed catalog entry.
+    .DESCRIPTION
+        The executable is resolved exactly like the "Open software" action.
+        A Start menu shortcut is copied so its arguments and icon are kept;
+        other targets get a new .lnk through WScript.Shell. Store apps are
+        started through explorer.exe and therefore keep the Explorer icon.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]$CatalogItem,
+        [string]$Sid = '',
+        [string]$DesktopPath = ''
+    )
+
+    $info = Get-SetupSoftwareLaunchInfo -CatalogItem $CatalogItem
+    if (-not $info.CanLaunch) {
+        $message = ("No program was found to create a shortcut for '{0}'." -f $info.Name)
+        Write-SetupLog -Level Warning -Message $message
+        return New-SetupResult -Name $info.Name -Success $false -Message $message `
+            -Data @{ Source = $info.Source }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($DesktopPath)) {
+        $DesktopPath = Get-SetupUserDesktopPath -Sid $Sid
+    }
+    if ([string]::IsNullOrWhiteSpace($DesktopPath)) {
+        $message = ("No desktop folder was found for '{0}'." -f $info.Name)
+        Write-SetupLog -Level Warning -Message $message
+        return New-SetupResult -Name $info.Name -Success $false -Message $message
+    }
+
+    $shortcutName = [string]$info.Name
+    foreach ($invalid in [IO.Path]::GetInvalidFileNameChars()) {
+        $shortcutName = $shortcutName.Replace([string]$invalid, '')
+    }
+    $shortcutName = $shortcutName.Trim().TrimEnd('.')
+    if ([string]::IsNullOrWhiteSpace($shortcutName)) { $shortcutName = 'Application' }
+    $shortcutPath = Join-Path $DesktopPath ($shortcutName + '.lnk')
+
+    try {
+        if (-not (Test-Path -LiteralPath $DesktopPath -PathType Container)) {
+            New-Item -ItemType Directory -Path $DesktopPath -Force -ErrorAction Stop | Out-Null
+        }
+
+        if ([IO.Path]::GetExtension([string]$info.LaunchPath) -eq '.lnk') {
+            # The Start menu shortcut already carries the right arguments and
+            # icon; copy it under the catalog name.
+            Copy-Item -LiteralPath ([string]$info.LaunchPath) -Destination $shortcutPath -Force -ErrorAction Stop
+        } else {
+            $shell = $null
+            try {
+                $shell = New-Object -ComObject WScript.Shell
+                $shortcut = $shell.CreateShortcut($shortcutPath)
+                $shortcut.TargetPath = [string]$info.LaunchPath
+                if (-not [string]::IsNullOrWhiteSpace([string]$info.Arguments)) {
+                    $shortcut.Arguments = [string]$info.Arguments
+                }
+                $workingDirectory = [string]$info.WorkingDirectory
+                if ([string]::IsNullOrWhiteSpace($workingDirectory)) {
+                    $workingDirectory = Split-Path -Parent ([string]$info.LaunchPath)
+                }
+                if (-not [string]::IsNullOrWhiteSpace($workingDirectory)) {
+                    $shortcut.WorkingDirectory = $workingDirectory
+                }
+                $shortcut.IconLocation = ('{0},0' -f [string]$info.LaunchPath)
+                $shortcut.Description = 'Created by Windows Automatic Setup'
+                $shortcut.Save()
+            } finally {
+                if ($null -ne $shell) {
+                    try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($shell) } catch { }
+                }
+            }
+        }
+    } catch {
+        $message = ("Could not create a desktop shortcut for '{0}': {1}" -f $info.Name, $_.Exception.Message)
+        Write-SetupLog -Level Error -Message $message
+        return New-SetupResult -Name $info.Name -Success $false -Message $message `
+            -Data @{ Path = $shortcutPath; DesktopPath = $DesktopPath }
+    }
+
+    $message = ("Desktop shortcut created: {0}" -f $shortcutPath)
+    Write-SetupLog -Level Success -Message $message
+    return New-SetupResult -Name $info.Name -Success $true -Message $message `
+        -Data @{ Path = $shortcutPath; DesktopPath = $DesktopPath; Source = $info.Source }
+}
+
 function Uninstall-SetupSoftware {
     <#
     .SYNOPSIS
@@ -5360,6 +5543,8 @@ Export-ModuleMember -Function @(
     'Get-SetupSoftwareLaunchInfo',
     'Invoke-SetupSoftwareLaunch',
     'Show-SetupSoftwareFolder',
+    'Get-SetupUserDesktopPath',
+    'New-SetupSoftwareShortcut',
     'Uninstall-SetupSoftware',
     'Update-SetupSoftware',
     'Get-BuiltInAdminAccount',

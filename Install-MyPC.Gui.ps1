@@ -161,6 +161,9 @@ $script:StringTable = @{
     'Software.PreviewIntro'    = @{ en = "The following {0} item(s) will be installed:"; fr = "Les {0} element(s) suivants seront installes :" }
     'Software.PreviewRestore'  = @{ en = "Create a System Restore point before installing"; fr = "Creer un point de restauration avant l'installation" }
     'Software.PreviewRestoreHint' = @{ en = "Recommended for drivers and system components. It can take a minute."; fr = "Recommande pour les pilotes et composants systeme. Cela peut prendre une minute." }
+    'Software.PreviewShortcut' = @{ en = "Create a desktop shortcut for each application"; fr = "Creer un raccourci sur le Bureau pour chaque application" }
+    'Software.PreviewShortcutHint' = @{ en = "Shortcuts are created on the desktop of the user who started the setup."; fr = "Les raccourcis sont crees sur le Bureau de l'utilisateur qui a lance l'installation." }
+    'Software.ShortcutTask'    = @{ en = "Creating the desktop shortcut for {0} ..."; fr = "Creation du raccourci Bureau de {0} ..." }
     'Software.PreviewProceed'  = @{ en = "Install"; fr = "Installer" }
     'Software.RestoreTask'     = @{ en = "Creating a System Restore point..."; fr = "Creation d'un point de restauration..." }
     'Software.RestoreCreated'  = @{ en = "System Restore point created."; fr = "Point de restauration cree." }
@@ -1311,6 +1314,7 @@ $script:QueueResults = [System.Collections.Generic.List[object]]::new()
 $script:SessionResults = [System.Collections.Generic.List[object]]::new()
 $script:PendingInstallRows = @()
 $script:PendingInstallRestore = $false
+$script:PendingInstallShortcut = $false
 $script:SoftwareCategoryId = ''
 $script:CurrentRow = $null
 $script:CurrentPS = $null
@@ -2329,6 +2333,7 @@ function Start-SoftwareInstall {
     if ($null -eq $preview) { return }
     $script:PendingInstallRows = @($selected)
     $script:PendingInstallRestore = [bool]$preview.RestorePoint
+    $script:PendingInstallShortcut = [bool]$preview.DesktopShortcut
     Start-SetupTask -Label (Get-UiText 'Software.Preflight') -Command 'Test-SetupPreflight' `
         -Parameters @{ SkipInternet = $false } -OnComplete 'Complete-InstallPreflight'
 }
@@ -2347,6 +2352,7 @@ function Complete-InstallPreflight {
         }
         $script:PendingInstallRows = @()
         $script:PendingInstallRestore = $false
+        $script:PendingInstallShortcut = $false
         return
     }
     Add-LogLine -Level Info -Message (Get-UiText 'Software.PreflightReady')
@@ -2571,6 +2577,27 @@ function Complete-SoftwareStep {
         } else {
             Set-SoftwareState -Row $row -Text (Get-UiText 'Status.Failed') -Tone 'Bad'
         }
+
+        if ($script:QueueAction -eq 'install' -and $script:PendingInstallShortcut -and
+            $result.Success -and -not $result.Skipped) {
+            $shortcutLabel = ((Get-UiText 'Software.ShortcutTask') -f $row.Name)
+            Start-SetupTask -Label $shortcutLabel -Command 'New-SetupSoftwareShortcut' `
+                -Parameters @{ CatalogItem = $row.Item; Sid = $script:OriginalUserSid } `
+                -OnComplete 'Complete-SoftwareShortcut'
+            return
+        }
+    }
+    Start-NextSoftware
+}
+
+function Complete-SoftwareShortcut {
+    $result = Get-FirstResult
+    if ($null -ne $result) {
+        if ($result.Success) {
+            Add-LogLine -Level Success -Message ([string]$result.Message)
+        } else {
+            Add-LogLine -Level Warning -Message ([string]$result.Message)
+        }
     }
     Start-NextSoftware
 }
@@ -2612,6 +2639,7 @@ function Complete-SoftwareRun {
     $script:Queue = @()
     $script:QueueIndex = 0
     $script:QueueTotal = 0
+    $script:PendingInstallShortcut = $false
 
     if ($failed.Count -gt 0) {
         $lines = ($failed | ForEach-Object { ' - ' + $_.Name }) -join "`r`n"
@@ -3714,8 +3742,18 @@ function Show-InstallPreview {
     [void]$panel.Children.Add($restore)
 
     $hint = New-UiText -Text (Get-UiText 'Software.PreviewRestoreHint') -Size 11.5 -Color '#5F6B76' -Wrap $true
-    $hint.Margin = [System.Windows.Thickness]::new(22, 0, 0, 16)
+    $hint.Margin = [System.Windows.Thickness]::new(22, 0, 0, 8)
     [void]$panel.Children.Add($hint)
+
+    $shortcut = [System.Windows.Controls.CheckBox]::new()
+    $shortcut.Content = Get-UiText 'Software.PreviewShortcut'
+    $shortcut.IsChecked = $true
+    $shortcut.Margin = [System.Windows.Thickness]::new(0, 0, 0, 4)
+    [void]$panel.Children.Add($shortcut)
+
+    $shortcutHint = New-UiText -Text (Get-UiText 'Software.PreviewShortcutHint') -Size 11.5 -Color '#5F6B76' -Wrap $true
+    $shortcutHint.Margin = [System.Windows.Thickness]::new(22, 0, 0, 16)
+    [void]$panel.Children.Add($shortcutHint)
 
     $buttons = [System.Windows.Controls.StackPanel]::new()
     $buttons.Orientation = [System.Windows.Controls.Orientation]::Horizontal
@@ -3741,11 +3779,15 @@ function Show-InstallPreview {
 
     $script:PreviewDialog = $dialog
     $script:PreviewDialogRestore = $restore
+    $script:PreviewDialogShortcut = $shortcut
     $script:PreviewDialogResult = $null
     $script:PreviewDialogTitle = Get-UiText 'Software.PreviewTitle'
 
     $okButton.Add_Click({
-        $script:PreviewDialogResult = [pscustomobject]@{ RestorePoint = ($script:PreviewDialogRestore.IsChecked -eq $true) }
+        $script:PreviewDialogResult = [pscustomobject]@{
+            RestorePoint    = ($script:PreviewDialogRestore.IsChecked -eq $true)
+            DesktopShortcut = ($script:PreviewDialogShortcut.IsChecked -eq $true)
+        }
         $script:PreviewDialog.Close()
     })
     $cancelButton.Add_Click({
@@ -3756,6 +3798,7 @@ function Show-InstallPreview {
     [void]$dialog.ShowDialog()
     $script:PreviewDialog = $null
     $script:PreviewDialogRestore = $null
+    $script:PreviewDialogShortcut = $null
     $result = $script:PreviewDialogResult
     $script:PreviewDialogResult = $null
     return $result

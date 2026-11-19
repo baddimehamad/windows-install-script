@@ -387,6 +387,10 @@ $missingLaunch = Invoke-SetupSoftwareLaunch -CatalogItem $missingSoftware
 Assert-True (-not $missingLaunch.Success) 'Invoke-SetupSoftwareLaunch refuses an unknown application'
 $missingFolder = Show-SetupSoftwareFolder -CatalogItem $missingSoftware
 Assert-True (-not $missingFolder.Success) 'Show-SetupSoftwareFolder refuses an unknown application'
+$missingShortcut = New-SetupSoftwareShortcut -CatalogItem $missingSoftware -DesktopPath (Join-Path $env:TEMP 'setup-verify-shortcuts')
+Assert-True (-not $missingShortcut.Success) 'New-SetupSoftwareShortcut refuses an unknown application'
+$desktopFolder = Get-SetupUserDesktopPath
+Assert-True (-not [string]::IsNullOrWhiteSpace($desktopFolder)) 'Get-SetupUserDesktopPath returns a desktop folder'
 
 # --------------------------------------------------------------------------
 # 6. Report export
@@ -466,6 +470,8 @@ Assert-True ($consoleText -match 'Show-SystemMaintenance' -and $consoleText -mat
 Assert-True ($guiText -match 'Set-SetupPowerSettings' -and $consoleText -match 'Set-SetupPowerPlan') 'Both front-ends share the power actions'
 Assert-True ($guiText -match 'Software.Action.Open' -and $guiText -match 'Software.Action.Location' -and $guiText -match 'Start-SoftwareOpen') 'The window offers open software and folder actions'
 Assert-True ($guiText -match 'Invoke-SetupSoftwareLaunch' -and $guiText -match 'Show-SetupSoftwareFolder') 'The window uses the shared launch actions'
+Assert-True ($guiText -match 'Software.PreviewShortcut' -and $guiText -match 'New-SetupSoftwareShortcut') 'The window offers a desktop shortcut option'
+Assert-True ($consoleText -match 'New-SetupSoftwareShortcut') 'The console creates desktop shortcuts'
 
 $guardedWrite = [regex]::Match($guiText, '(?s)(Set-Content|Out-File|Export-Csv|ConvertTo-Json)[^\r\n]{0,200}Software\.json')
 Assert-True (-not $guardedWrite.Success) 'The window never writes Software.json'

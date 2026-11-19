@@ -288,6 +288,9 @@ function Invoke-InstallSoftware {
         Show-Result (New-SetupRestorePoint -Description 'Windows Automatic Setup - before software installation')
     }
 
+    $shortcutAnswer = ((Read-Host 'Create a desktop shortcut for each installed application? [Y/n] / Raccourci sur le Bureau ?') | ForEach-Object { "$_".Trim().ToLowerInvariant() })
+    $createShortcuts = [string]::IsNullOrWhiteSpace($shortcutAnswer) -or $shortcutAnswer -in @('y', 'yes', 'o', 'oui')
+
     $wingetChosen = @($chosenSoftware | Where-Object { $_.Kind -eq 'winget' })
     if ($wingetChosen.Count -gt 0 -and $null -eq (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
         Write-Host ''
@@ -300,10 +303,15 @@ function Invoke-InstallSoftware {
     }
 
     foreach ($chosen in $chosenSoftware) {
+        $installResult = $null
         if ($chosen.Kind -eq 'winget') {
-            Show-Result (Install-SetupWingetApp -App $chosen.Item)
+            $installResult = Install-SetupWingetApp -App $chosen.Item
         } else {
-            Show-Result (Install-SetupLocalPackage -Installer $chosen.Item)
+            $installResult = Install-SetupLocalPackage -Installer $chosen.Item
+        }
+        Show-Result $installResult
+        if ($createShortcuts -and $null -ne $installResult -and $installResult.Success -and -not $installResult.Skipped) {
+            Show-Result (New-SetupSoftwareShortcut -CatalogItem $chosen.Item -Sid $script:OriginalUserSid)
         }
     }
 }
