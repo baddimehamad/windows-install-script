@@ -3408,6 +3408,13 @@ function Render-SystemDashboard {
             $grid = [System.Windows.Controls.Grid]::new()
             $grid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 5)
 
+            # Row 0 holds the label and value. A detail line needs its own
+            # explicit second row; without it, Grid.SetRow(detail, 1) falls
+            # back to row 0 and draws over the label and value.
+            $mainRow = [System.Windows.Controls.RowDefinition]::new()
+            $mainRow.Height = [System.Windows.GridLength]::Auto
+            [void]$grid.RowDefinitions.Add($mainRow)
+
             $first = [System.Windows.Controls.ColumnDefinition]::new()
             $first.Width = [System.Windows.GridLength]::new(136)
             $second = [System.Windows.Controls.ColumnDefinition]::new()
@@ -3419,6 +3426,7 @@ function Render-SystemDashboard {
             if ([string]::IsNullOrWhiteSpace($labelText)) { $labelText = Get-UiText ([string]$row.LabelKey) }
             $label = New-UiText -Text $labelText -Size 11.5 -Color '#5F6B76' -Wrap $true
             $label.VerticalAlignment = [System.Windows.VerticalAlignment]::Top
+            [System.Windows.Controls.Grid]::SetRow($label, 0)
             [System.Windows.Controls.Grid]::SetColumn($label, 0)
             [void]$grid.Children.Add($label)
 
@@ -3428,6 +3436,7 @@ function Render-SystemDashboard {
             if ($toneColors.ContainsKey([string]$row.Tone)) { $color = $toneColors[[string]$row.Tone] }
             $value = New-UiText -Text $valueText -Size 12 -Weight SemiBold -Color $color -Wrap $true
             $value.VerticalAlignment = [System.Windows.VerticalAlignment]::Top
+            [System.Windows.Controls.Grid]::SetRow($value, 0)
             [System.Windows.Controls.Grid]::SetColumn($value, 1)
             [void]$grid.Children.Add($value)
 
